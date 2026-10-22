@@ -9,7 +9,7 @@ On a shop where each filter request takes several seconds, choosing four options
 ## Quick start
 
 1. Make sure Filter Everything is active and shows a filter set on your shop pages.
-2. Download the ZIP of this repository (or `git archive`, see [Packaging](#packaging)) and install it from *Plugins > Add New > Upload Plugin*.
+2. Download `filter-everything-batch-apply.zip` from the [latest release](https://github.com/eliseumarmon/filter-everything-batch-apply/releases/latest) (or build it, see [Packaging](#packaging)) and install it from *Plugins > Add New > Upload Plugin*.
 3. Activate it, open a shop page, tick a few options and press **Apply filters**: one page load, no requests while ticking.
 
 Deactivating the add-on restores Filter Everything's native behavior.
@@ -62,6 +62,7 @@ One tab stop per term, Space/Enter toggle without scrolling, visible focus rings
 | Filter | Default | Use |
 |---|---|---|
 | `fe_batch_apply_fields` | Supported fields of the page | Array of `{ eName, entity, view, params, setId }`. Return `[]` to disable the add-on on a page. |
+| `fe_batch_apply_update_repo` | `eliseumarmon/filter-everything-batch-apply` | GitHub repository (`owner/repo`) whose releases provide updates, see [Updates](#updates). |
 | `fe_batch_apply_reset_presentation` | `true` | By default sections start open and More/Less collapsed on every load (only Filter Everything's presentation cookies are cleared). Return `false` to keep the visitor's choices. |
 
 ```php
@@ -72,6 +73,21 @@ add_filter('fe_batch_apply_reset_presentation', '__return_false');
 ## Translations
 
 Text domain `fe-batch-apply`; source strings in English. Spanish (`es_ES`) ships in `languages/` (`.po` and WordPress 6.5+ `.l10n.php`); start new languages from `fe-batch-apply.pot`. The currency symbol comes from WooCommerce.
+
+## Updates
+
+Updates come from this repository's public GitHub releases, with no token and no extra plugin. WordPress shows a new version in *Plugins* and *Dashboard > Updates* like any other plugin, and the add-on installs it with one click.
+
+- The version is the release tag (`v0.3.0` → 0.3.0) and the package is its `filter-everything-batch-apply.zip` asset. A release without that asset is ignored.
+- To update without clicking, choose *Enable auto-updates* for the add-on in *Plugins*.
+- GitHub allows 60 unauthenticated API requests per hour per IP. The add-on asks at most once every 6 hours (once an hour after a failure), so a shared host stays far below the limit; a failed check only delays the update.
+- A fork can publish its own releases and point the updater at them:
+
+```php
+add_filter('fe_batch_apply_update_repo', function () {
+    return 'your-name/filter-everything-batch-apply';
+});
+```
 
 ## Development
 
@@ -98,11 +114,23 @@ In Git Bash on Windows, prefix commands with `MSYS_NO_PATHCONV=1` so path variab
 
 ### Packaging
 
-`tests/` is excluded from archives, so the ZIP contains only what WordPress needs:
+`tests/` and `.github/` are excluded from archives, so the ZIP contains only what WordPress needs:
 
 ```sh
 git archive --format=zip --prefix=filter-everything-batch-apply/ -o filter-everything-batch-apply.zip HEAD
 ```
+
+### Releasing
+
+1. Bump the `Version:` header and `FE_BATCH_APPLY_VERSION` in `filter-everything-batch-apply.php`, and add a `### X.Y.Z` section to the [Changelog](#changelog).
+2. Commit, then tag and push the tag:
+
+   ```sh
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+The [release workflow](.github/workflows/release.yml) checks that the tag matches the plugin version, builds the ZIP with `git archive` and publishes the GitHub release with that changelog section as notes. Sites pick it up on their next update check.
 
 ## Changelog
 
@@ -117,6 +145,7 @@ git archive --format=zip --prefix=filter-everything-batch-apply/ -o filter-every
 - Keyboard and focus improvements (see [Accessibility](#accessibility)).
 - Robust re-initialization when the widget is replaced, and no work on pages without a widget.
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters; requires WordPress 6.5 and declares the Filter Everything dependency.
+- Automatic updates from GitHub releases (see [Updates](#updates)), published by a tag-triggered release workflow.
 
 ### 0.1.x
 
