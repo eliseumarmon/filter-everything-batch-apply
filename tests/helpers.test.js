@@ -366,3 +366,37 @@ test('rootSetId reads data-set, then the wpc-filter-set-N class', () => {
   assert.equal(helpers.rootSetId('abc', 'wpc-filter-set-widget-title'), '');
   assert.equal(helpers.rootSetId(undefined, ''), '');
 });
+
+test('snapshotState copies selections and range states as rendered', () => {
+  const selections = new Map([['filtro_color', new Set(['rojo'])], ['filtro_talla', new Set()]]);
+  const ranges = [{ params: ['min_p', 'max_p'], min: 20, max: 60, changed: false, reset: false, lowerBound: 10, upperBound: 96 }];
+  const snapshot = helpers.snapshotState(selections, ranges);
+  // Later changes do not leak into the snapshot.
+  selections.get('filtro_color').add('azul');
+  selections.get('filtro_talla').add('xl');
+  Object.assign(ranges[0], { min: 30, max: 40, changed: true, reset: true });
+  assert.deepEqual([...snapshot.selections.get('filtro_color')], ['rojo']);
+  assert.deepEqual([...snapshot.selections.get('filtro_talla')], []);
+  assert.deepEqual(snapshot.ranges, [{ min: 20, max: 60, changed: false, reset: false }]);
+});
+
+test('restoreState puts selections and ranges back in place', () => {
+  const selections = new Map([['filtro_color', new Set(['rojo'])], ['filtro_talla', new Set()]]);
+  const colorSet = selections.get('filtro_color');
+  const ranges = [{ params: ['min_p', 'max_p'], min: 10, max: 96, changed: false, reset: false, lowerBound: 10, upperBound: 96 }];
+  const snapshot = helpers.snapshotState(selections, ranges);
+  colorSet.delete('rojo');
+  colorSet.add('azul');
+  selections.get('filtro_talla').add('xl');
+  Object.assign(ranges[0], { min: 25, max: 70, changed: true });
+  helpers.restoreState(snapshot, selections, ranges);
+  // Same Set objects (other closures hold them), back to the snapshot.
+  assert.equal(selections.get('filtro_color'), colorSet);
+  assert.deepEqual([...colorSet], ['rojo']);
+  assert.deepEqual([...selections.get('filtro_talla')], []);
+  assert.deepEqual({ min: ranges[0].min, max: ranges[0].max, changed: ranges[0].changed, reset: ranges[0].reset },
+    { min: 10, max: 96, changed: false, reset: false });
+  // Range fields outside the snapshot are untouched.
+  assert.deepEqual(ranges[0].params, ['min_p', 'max_p']);
+  assert.equal(ranges[0].upperBound, 96);
+});

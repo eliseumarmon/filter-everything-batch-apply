@@ -252,10 +252,38 @@
     return false;
   }
 
+  const RANGE_STATE_KEYS = ['min', 'max', 'changed', 'reset'];
+
+  /**
+   * Copy of a widget's local state as rendered by the server: the selected
+   * values per param and each range editor's chosen bounds and flags.
+   */
+  function snapshotState(selections, ranges) {
+    return {
+      selections: new Map([...selections].map(([param, values]) => [param, [...values]])),
+      ranges: ranges.map(range => Object.fromEntries(RANGE_STATE_KEYS.map(key => [key, range[key]]))),
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place. The Set and range objects are mutated,
+   * not replaced, because the widget's event handlers hold them.
+   */
+  function restoreState(snapshot, selections, ranges) {
+    for (const [param, values] of selections) {
+      values.clear();
+      for (const value of snapshot.selections.get(param) || []) values.add(value);
+    }
+    ranges.forEach((range, index) => {
+      if (snapshot.ranges[index]) Object.assign(range, snapshot.ranges[index]);
+    });
+  }
+
   const helpers = {
     parseValues, readSelection, rootSetId, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS, mutationsAddWidget,
+    snapshotState, restoreState,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -297,9 +325,10 @@
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
   const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
   const initialized = new WeakSet();
-  // Busy state of each Apply/Reset pair: released on a back/forward cache
-  // restore, timer cancelled when the page is hidden.
-  const busyControllers = [];
+  // One controller per initialized widget. On a back/forward cache restore
+  // its local state returns to the server-rendered snapshot and its busy
+  // state is released; its timer is cancelled when the page is hidden.
+  const widgetControllers = [];
   // Field map of each widget root, keyed by eName. With config it comes
   // from the root's filter set; without config it starts empty and fields
   // are discovered from the markup (see multiFieldFor).
@@ -466,6 +495,7 @@
       state.reset = true;
       redraw();
     };
+    state.redraw = redraw;
     redraw();
 
     // Hide all of the plugin's original *range content*, including the
@@ -555,6 +585,9 @@
     syncInputs();
 
     const ranges = supportedRanges(root).map(addRangeEditor).filter(Boolean);
+    // State as rendered for this URL. A back/forward cache restore brings
+    // back the page with whatever the visitor changed before leaving it.
+    const renderedState = snapshotState(selections, ranges);
     const managedParams = hasConfig
       ? [...fields.values()].flatMap(field => field.params)
       : [...multiFields.flatMap(field => field.params), ...ranges.flatMap(range => range.params)];
@@ -620,10 +653,15 @@
       navigationGuard.start();
       window.location.assign(href);
     };
-    busyControllers.push({
+    widgetControllers.push({
       release() {
         navigationGuard.cancel();
         releaseBusy();
+      },
+      restore() {
+        restoreState(renderedState, selections, ranges);
+        syncInputs();
+        ranges.forEach(range => range.redraw());
       },
       cancelTimer: navigationGuard.cancel,
     });
@@ -711,13 +749,19 @@
   // The page is unloading or entering the back/forward cache: the pending
   // navigation committed, so its timeout must not fire later.
   window.addEventListener('pagehide', () => {
-    busyControllers.forEach(controller => controller.cancelTimer());
+    widgetControllers.forEach(controller => controller.cancelTimer());
   });
 
-  // A back/forward cache restore is a navigation without a new page load.
+  // A back/forward cache restore is a navigation without a new page load:
+  // the DOM and this script's state are as the visitor left them (for
+  // example a term checked right before Apply), so return every widget to
+  // what the server rendered for this URL.
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
-    busyControllers.forEach(controller => controller.release());
+    widgetControllers.forEach(controller => {
+      controller.restore();
+      controller.release();
+    });
     for (const root of getRootCandidates()) setInitialPresentation(root);
   });
 })();
