@@ -57,12 +57,20 @@ function fe_batch_normalize_field($filter) {
         return null;
     }
 
-    return array(
+    $field = array(
         'eName' => $e_name,
         'entity' => $entity,
         'view' => $view,
         'params' => $params,
     );
+    // Filter Everything stores the owning filter set ID in `parent`. Two sets
+    // on one page may share an e_name with different slugs; the script picks
+    // the fields of each widget's set. Without it, matching is by e_name only.
+    $set_id = isset($filter['parent']) && is_numeric($filter['parent']) ? (int) $filter['parent'] : 0;
+    if ($set_id > 0) {
+        $field['setId'] = $set_id;
+    }
+    return $field;
 }
 
 /**
@@ -102,10 +110,15 @@ function fe_batch_get_fields() {
         $seen = array();
         foreach ($related as $filter) {
             $field = fe_batch_normalize_field($filter);
-            if ($field === null || isset($seen[$field['eName']])) {
+            if ($field === null) {
                 continue;
             }
-            $seen[$field['eName']] = true;
+            // De-duplicate within one filter set only (set-less fields share key 0).
+            $key = (isset($field['setId']) ? $field['setId'] : 0) . ':' . $field['eName'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
             $fields[] = $field;
         }
     }
@@ -114,7 +127,7 @@ function fe_batch_get_fields() {
      * Filters the fields handled by the addon on the current page.
      * Return an empty array to keep Filter Everything's native behavior.
      *
-     * @param array $fields List of { eName, entity, view, params }.
+     * @param array $fields List of { eName, entity, view, params, setId? }.
      */
     $fields = apply_filters('fe_batch_apply_fields', $fields);
     $fields = is_array($fields) ? array_values($fields) : array();

@@ -59,7 +59,7 @@ The add-on also:
 
 | Hook | Default | Purpose |
 |---|---|---|
-| `fe_batch_apply_fields` | Supported fields of the page | Array of `{ eName, entity, view, params }` handled by the add-on. Return an empty array to disable it on a page. |
+| `fe_batch_apply_fields` | Supported fields of the page | Array of `{ eName, entity, view, params, setId }` handled by the add-on (`setId`, the owning filter set, is optional). Return an empty array to disable it on a page. |
 | `fe_batch_apply_reset_presentation` | `true` | Return `false` to keep the visitor's open/closed sections and More/Less state instead of resetting them on each load. |
 
 ```php
@@ -92,6 +92,7 @@ node --test "tests/*.test.js"
 - Apply/Reset leave the busy state after 30 seconds when the navigation never commits (Stop, cancelled unload, 204 response or download).
 - Widgets added after load, or re-added when any wrapper around them is replaced, are initialized once; the observer only inspects added nodes.
 - Stops observing the page after `load` when no Filter Everything widget was rendered (for example a product search without a sidebar); a widget first injected later on such a page is not handled.
+- Fields are resolved per filter set: two sets on one page that share a field source with different URL slugs each write their own parameter. Without set information, fields match by source name as before.
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters.
 - Requires WordPress 6.5 and declares the Filter Everything dependency.
 

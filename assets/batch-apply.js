@@ -30,23 +30,59 @@
       params.every(param => typeof param === 'string' && param !== '');
   }
 
+  /** Set ID as a non-empty string of digits, or '' when absent or invalid. */
+  function normalizeSetId(value) {
+    if (typeof value !== 'number' && typeof value !== 'string') return '';
+    const id = String(value).trim();
+    return /^[1-9]\d*$/.test(id) ? id : '';
+  }
+
   /**
-   * Map of eName => { eName, entity, view, params, kind } built from the
-   * config printed by PHP. `kind` is "multi" (checkboxes/labels, one param)
-   * or "range" (numeric range, min/max params). Invalid entries are skipped.
+   * Filter set ID of a widget root: Filter Everything prints it in
+   * `data-set` and in a `wpc-filter-set-{ID}` class. '' when neither exists.
    */
-  function buildFieldMap(config) {
+  function rootSetId(dataSet, className) {
+    const fromData = normalizeSetId(dataSet);
+    if (fromData) return fromData;
+    const match = /(?:^|\s)wpc-filter-set-(\d+)(?=\s|$)/.exec(String(className || ''));
+    return match ? normalizeSetId(match[1]) : '';
+  }
+
+  /** One config field normalized with its `kind`, or null when invalid. */
+  function normalizeField(field) {
+    if (!field || typeof field.eName !== 'string' || !field.eName) return null;
+    const view = typeof field.view === 'string' ? field.view : '';
+    const entity = typeof field.entity === 'string' ? field.entity : '';
+    let kind = null;
+    if (view === 'range' && isParamList(field.params, 2)) kind = 'range';
+    else if (view !== 'range' && isParamList(field.params, 1)) kind = 'multi';
+    if (!kind) return null;
+    return { eName: field.eName, entity, view, params: [...field.params], kind, setId: normalizeSetId(field.setId) };
+  }
+
+  /**
+   * Map of eName => { eName, entity, view, params, kind, setId } built from
+   * the config printed by PHP. `kind` is "multi" (checkboxes/labels, one
+   * param) or "range" (numeric range, min/max params). Invalid entries are
+   * skipped.
+   *
+   * Two filter sets on one page may share an e_name with different slugs,
+   * so the map is built for one widget root: with `setId`, fields of other
+   * sets are left out and a field of that set wins over a set-less one.
+   * Without set information (no `setId`, or no field of that set) the first
+   * field per e_name wins, as in earlier versions.
+   */
+  function buildFieldMap(config, setId) {
     const map = new Map();
-    const fields = config && Array.isArray(config.fields) ? config.fields : [];
+    const fields = (config && Array.isArray(config.fields) ? config.fields : []).map(normalizeField).filter(Boolean);
+    const rootSet = normalizeSetId(setId);
+    const scoped = rootSet !== '' && fields.some(field => field.setId === rootSet);
     for (const field of fields) {
-      if (!field || typeof field.eName !== 'string' || !field.eName || map.has(field.eName)) continue;
-      const view = typeof field.view === 'string' ? field.view : '';
-      const entity = typeof field.entity === 'string' ? field.entity : '';
-      let kind = null;
-      if (view === 'range' && isParamList(field.params, 2)) kind = 'range';
-      else if (view !== 'range' && isParamList(field.params, 1)) kind = 'multi';
-      if (!kind) continue;
-      map.set(field.eName, { eName: field.eName, entity, view, params: [...field.params], kind });
+      if (scoped && field.setId !== '' && field.setId !== rootSet) continue;
+      const existing = map.get(field.eName);
+      const ownSet = scoped && field.setId === rootSet;
+      if (existing && (!ownSet || existing.setId === rootSet)) continue;
+      map.set(field.eName, field);
     }
     return map;
   }
@@ -217,7 +253,7 @@
   }
 
   const helpers = {
-    parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
+    parseValues, readSelection, rootSetId, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS, mutationsAddWidget,
   };
@@ -252,10 +288,6 @@
   }, hasConfig && rawConfig.strings && typeof rawConfig.strings === 'object' ? rawConfig.strings : {});
   const CURRENCY = hasConfig && typeof rawConfig.currencySymbol === 'string' ? rawConfig.currencySymbol : '';
 
-  const configFields = buildFieldMap(rawConfig);
-  // Without config, fields are discovered from the markup (see multiFieldFor).
-  const discoveredFields = new Map();
-
   const ROOT_SELECTOR = '.wpc-filters-main-wrap';
   const FALLBACK_ROOT_SELECTOR = '.wpc-filters-widget-wrapper';
   // Any Filter Everything widget container, supported or not.
@@ -268,18 +300,29 @@
   // Busy state of each Apply/Reset pair: released on a back/forward cache
   // restore, timer cancelled when the page is hidden.
   const busyControllers = [];
+  // Field map of each widget root, keyed by eName. With config it comes
+  // from the root's filter set; without config it starts empty and fields
+  // are discovered from the markup (see multiFieldFor).
+  const rootFields = new WeakMap();
 
-  function multiFieldFor(input) {
+  function fieldsFor(root) {
+    if (!rootFields.has(root)) {
+      rootFields.set(root, hasConfig ? buildFieldMap(rawConfig, rootSetId(root.dataset.set, root.className)) : new Map());
+    }
+    return rootFields.get(root);
+  }
+
+  function multiFieldFor(input, fields) {
     const eName = input.dataset.wpcEName;
     if (hasConfig) {
-      const field = configFields.get(eName);
+      const field = fields.get(eName);
       return field && field.kind === 'multi' ? field : null;
     }
-    if (discoveredFields.has(eName)) return discoveredFields.get(eName);
+    if (fields.has(eName)) return fields.get(eName);
     const param = deriveParamFromLink(input.dataset.wpcLink, window.location.href, input.dataset.wpcSlug, SEPARATOR);
     if (!param) return null;
     const field = { eName, entity: '', view: '', params: [param], kind: 'multi' };
-    discoveredFields.set(eName, field);
+    fields.set(eName, field);
     return field;
   }
 
@@ -289,9 +332,9 @@
     return maxInput ? { section, minInput, maxInput } : null;
   }
 
-  function rangeFieldFor(minInput, maxInput) {
+  function rangeFieldFor(minInput, maxInput, fields) {
     if (hasConfig) {
-      const field = configFields.get(minInput.dataset.wpcEName);
+      const field = fields.get(minInput.dataset.wpcEName);
       return field && field.kind === 'range' ? field : null;
     }
     // Native range inputs carry their URL param in `name`.
@@ -300,14 +343,16 @@
   }
 
   function supportedInputs(root) {
-    return [...root.querySelectorAll(INPUT_SELECTOR)].filter(input => input.closest(ITEM_SELECTOR) && multiFieldFor(input));
+    const fields = fieldsFor(root);
+    return [...root.querySelectorAll(INPUT_SELECTOR)].filter(input => input.closest(ITEM_SELECTOR) && multiFieldFor(input, fields));
   }
 
   function supportedRanges(root) {
+    const fields = fieldsFor(root);
     const ranges = [];
     for (const minInput of root.querySelectorAll(RANGE_MIN_SELECTOR)) {
       const pair = findRangePair(minInput);
-      const field = pair && rangeFieldFor(pair.minInput, pair.maxInput);
+      const field = pair && rangeFieldFor(pair.minInput, pair.maxInput, fields);
       if (field) ranges.push(Object.assign(pair, { field }));
     }
     return ranges;
@@ -480,16 +525,17 @@
     if (initialized.has(root)) return;
     initialized.add(root);
 
+    const fields = fieldsFor(root);
     const inputs = supportedInputs(root);
     // Config order keeps the 0.1.4 param order; discovered fields follow the DOM.
     const multiFields = hasConfig
-      ? [...configFields.values()].filter(field => field.kind === 'multi')
-      : [...new Set(inputs.map(multiFieldFor))];
+      ? [...fields.values()].filter(field => field.kind === 'multi')
+      : [...new Set(inputs.map(input => multiFieldFor(input, fields)))];
     const selections = new Map(multiFields.map(field =>
       [field.params[0], readSelection(window.location.href, field.params[0], SEPARATOR)]
     ));
     const selectionFor = input => {
-      const field = multiFieldFor(input);
+      const field = multiFieldFor(input, fields);
       return field ? selections.get(field.params[0]) || null : null;
     };
     for (const input of inputs) {
@@ -510,7 +556,7 @@
 
     const ranges = supportedRanges(root).map(addRangeEditor).filter(Boolean);
     const managedParams = hasConfig
-      ? [...configFields.values()].flatMap(field => field.params)
+      ? [...fields.values()].flatMap(field => field.params)
       : [...multiFields.flatMap(field => field.params), ...ranges.flatMap(range => range.params)];
 
     const toggle = input => {

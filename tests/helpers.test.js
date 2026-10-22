@@ -314,3 +314,55 @@ test('mutationsAddWidget finds added widgets or ancestors that contain one', () 
   assert.equal(helpers.mutationsAddWidget([{ addedNodes: [], removedNodes: [widget] }], selector), false);
   assert.equal(helpers.mutationsAddWidget([], selector), false);
 });
+
+/** Two filter sets on one page sharing an e_name with different slugs. */
+const TWO_SETS = {
+  separator: ';',
+  fields: [
+    { eName: 'pa_colores', entity: 'taxonomy', view: 'checkboxes', params: ['color'], setId: 10 },
+    { eName: '_price', entity: 'post_meta_num', view: 'range', params: ['min_price', 'max_price'], setId: 10 },
+    { eName: 'pa_colores', entity: 'taxonomy', view: 'labels', params: ['colour'], setId: 20 },
+    { eName: '_price', entity: 'post_meta_num', view: 'range', params: ['min_cost', 'max_cost'], setId: 20 },
+  ],
+};
+
+test('buildFieldMap resolves each root to the params of its own filter set', () => {
+  const first = helpers.buildFieldMap(TWO_SETS, '10');
+  assert.deepEqual(first.get('pa_colores').params, ['color']);
+  assert.deepEqual(first.get('_price').params, ['min_price', 'max_price']);
+  const second = helpers.buildFieldMap(TWO_SETS, '20');
+  assert.deepEqual(second.get('pa_colores').params, ['colour']);
+  assert.equal(second.get('pa_colores').view, 'labels');
+  assert.deepEqual(second.get('_price').params, ['min_cost', 'max_cost']);
+  // Numeric and string set IDs are equivalent.
+  assert.deepEqual(helpers.buildFieldMap(TWO_SETS, 20).get('pa_colores').params, ['colour']);
+});
+
+test('buildFieldMap falls back to e_name-only matching without set information', () => {
+  // Root without a set ID: first field per e_name wins (0.2.0 behavior).
+  assert.deepEqual(helpers.buildFieldMap(TWO_SETS).get('pa_colores').params, ['color']);
+  assert.deepEqual(helpers.buildFieldMap(TWO_SETS, '').get('pa_colores').params, ['color']);
+  // Root whose set has no configured field: same legacy map.
+  assert.deepEqual(helpers.buildFieldMap(TWO_SETS, '99').get('pa_colores').params, ['color']);
+  // Fields without a set ID are shared by every root.
+  const legacy = helpers.buildFieldMap(CONFIG, '4606');
+  assert.equal(legacy.size, 5);
+  assert.deepEqual(legacy.get('pa_colores').params, ['filtro_color']);
+  // A field of the root's own set wins over a set-less one with the same e_name.
+  const mixed = helpers.buildFieldMap({
+    fields: [
+      { eName: 'pa_talla', view: 'checkboxes', params: ['size'] },
+      { eName: 'pa_talla', view: 'checkboxes', params: ['talla'], setId: 7 },
+      { eName: 'pa_talla', view: 'checkboxes', params: ['other'], setId: 8 },
+    ],
+  }, '7');
+  assert.deepEqual(mixed.get('pa_talla').params, ['talla']);
+});
+
+test('rootSetId reads data-set, then the wpc-filter-set-N class', () => {
+  assert.equal(helpers.rootSetId('4606', 'wpc-filters-main-wrap wpc-filter-set-1'), '4606');
+  assert.equal(helpers.rootSetId('', 'wpc-filters-main-wrap  wpc-filter-set-4606'), '4606');
+  assert.equal(helpers.rootSetId(undefined, 'wpc-filter-set-12 other'), '12');
+  assert.equal(helpers.rootSetId('abc', 'wpc-filter-set-widget-title'), '');
+  assert.equal(helpers.rootSetId(undefined, ''), '');
+});
