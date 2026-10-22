@@ -646,6 +646,22 @@
     start();
   }
 
+  /**
+   * Filter Everything can report filters for a page whose theme renders no
+   * widget (for example a product search without a sidebar). Do not keep
+   * observing such a page: once it has loaded without any widget, stop.
+   * Trade-off: a widget first injected after `load` on that page is not
+   * handled; widgets present at load keep being watched for replacements.
+   */
+  const stopIfNoWidget = () => {
+    if (!document.querySelector(WIDGET_SELECTOR)) observer.disconnect();
+  };
+  if (document.readyState === 'complete') {
+    stopIfNoWidget();
+  } else {
+    window.addEventListener('load', stopIfNoWidget, { once: true });
+  }
+
   // The page is unloading or entering the back/forward cache: the pending
   // navigation committed, so its timeout must not fire later.
   window.addEventListener('pagehide', () => {
