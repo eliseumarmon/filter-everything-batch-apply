@@ -17,10 +17,14 @@
  *                   --remote-debugging-port (e.g. http://127.0.0.1:9222)
  *                   instead of launching one.
  *
+ * Back is run twice: in the main browser (usually restored from the
+ * back/forward cache) and in a second browser launched with
+ * --disable-features=BackForwardCache, where Back reloads the page and the
+ * browser restores form control state, as for logged-in visitors who get
+ * `Cache-Control: no-store`. With CDP_URL only the attached browser runs.
+ *
  * Exit code 0 when every scenario passes or when no browser is found
  * (prints SKIPPED); 1 when a scenario fails or the site is unreachable.
- * A scenario the browser cannot run (for example Back without a
- * back/forward cache restore) prints SKIP and does not fail the run.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -37,8 +41,6 @@ const PAGINATION_PARAMS = ['paged', 'product-page'];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class CheckFailure extends Error {}
-/** Thrown when a scenario cannot run in this browser; reported, not failed. */
-class ScenarioSkip extends Error {}
 
 function check(condition, message) {
   if (!condition) throw new CheckFailure(message);
@@ -68,11 +70,11 @@ function findBrowser() {
 }
 
 /** Starts a headless browser with a throwaway profile; resolves its HTTP endpoint. */
-async function launchBrowser(executable) {
+async function launchBrowser(executable, extraArgs = []) {
   const profile = mkdtempSync(join(tmpdir(), 'fe-batch-smoke-'));
   const child = spawn(executable, [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
+    '--remote-debugging-port=0', `--user-data-dir=${profile}`, ...extraArgs, 'about:blank',
   ], { stdio: 'ignore' });
   const close = async () => {
     child.kill();
@@ -171,12 +173,16 @@ async function createPage(session) {
   const { frameTree } = await send('Page.getFrameTree');
   const mainFrameId = frameTree.frame.id;
 
-  // Main-frame document requests (one per navigation attempt) and page errors.
+  // Main-frame document requests (one per navigation attempt), page errors
+  // and why the back/forward cache was not used for a history navigation.
   const documentRequests = [];
   const errors = [];
+  const cacheNotUsed = [];
   session.on(({ method, params }) => {
     if (method === 'Network.requestWillBeSent' && params.type === 'Document' && params.frameId === mainFrameId) {
       documentRequests.push(params.request.url);
+    } else if (method === 'Page.backForwardCacheNotUsed') {
+      cacheNotUsed.push((params.notRestoredExplanations || []).map(item => item.reason).join(', ') || 'unknown');
     } else if (method === 'Runtime.exceptionThrown') {
       const details = params.exceptionDetails;
       errors.push((details.exception && details.exception.description) || details.text);
@@ -257,7 +263,7 @@ async function createPage(session) {
     await send('Input.dispatchKeyEvent', { type: 'keyUp', ...definition });
   }
 
-  return { send, evaluate, waitUntil, expectNavigation, goto, click, press, documentRequests, errors };
+  return { send, evaluate, waitUntil, expectNavigation, goto, click, press, documentRequests, errors, cacheNotUsed };
 }
 
 /* ------------------------------------------------------------------
@@ -458,32 +464,37 @@ async function applyNavigatesOnce(page) {
   return `busy state set, 1 request: ${before.pathname}${before.search} -> ${actual.pathname}${actual.search}`;
 }
 
-async function backRestoresRenderedState(page) {
+/**
+ * Check a term, Apply, then Back. Whether the browser brings the page back
+ * from its back/forward cache (same document) or reloads it (form control
+ * state restored by the browser), every checkbox must show the rendered
+ * state and the local selection must match the URL again. `cache` is
+ * "any" (report which path ran) or "off" (the browser must reload).
+ */
+async function backRestoresRenderedState(page, cache) {
   await page.goto(ARCHIVE_PATH);
   const startHref = await page.evaluate('location.href');
   const [item] = await markItems(page, 1);
   // Checked state of every term as rendered, and a marker that survives
-  // only when Back restores this same page from the back/forward cache.
+  // only when Back restores this same document from the cache.
   const RENDERED = `[...document.querySelectorAll('.fe-batch-ready input[type="checkbox"][data-wpc-e-name]')].map(i => i.checked)`;
-  const rendered = await page.evaluate(`(() => {
-    window.__smokePersisted = false;
-    addEventListener('pageshow', event => { window.__smokePersisted = event.persisted; });
-    return ${RENDERED};
-  })()`);
+  const rendered = await page.evaluate(`(() => { window.__smokeSameDocument = true; return ${RENDERED}; })()`);
   await page.click(clickTarget(0));
   await expectChecked(page, 0, true, 'before Apply');
   await page.expectNavigation(() => page.evaluate('document.querySelector(".fe-batch-ready .fe-batch-apply").click()'));
   const applied = await page.evaluate('location.href');
   check(applied !== startHref, 'Apply did not navigate');
 
+  page.cacheNotUsed.length = 0;
   const { currentIndex, entries } = await page.send('Page.getNavigationHistory');
   await page.send('Page.navigateToHistoryEntry', { entryId: entries[currentIndex - 1].id });
   await page.waitUntil(`location.href === ${JSON.stringify(startHref)} && document.readyState === 'complete'`, 'Back did not return to the start page');
   await sleep(300);
-  if (await page.evaluate('window.__smokePersisted') !== true) {
-    throw new ScenarioSkip('Back reloaded the page (no back/forward cache restore in this browser)');
-  }
+  const fromCache = await page.evaluate('window.__smokeSameDocument === true');
+  check(cache !== 'off' || !fromCache, 'Back restored the page from the back/forward cache although it is disabled');
   await page.waitUntil('!!document.querySelector(".fe-batch-ready .fe-batch-controls")', 'Widget missing after Back');
+  // A reloaded page is a new document: mark the same term again.
+  if (!fromCache) await markItems(page, 0, [item]);
   const restored = await page.evaluate(RENDERED);
   check(JSON.stringify(restored) === JSON.stringify(rendered), 'Checkbox states after Back differ from the rendered page');
   await expectChecked(page, 0, false, 'after Back');
@@ -494,7 +505,8 @@ async function backRestoresRenderedState(page) {
   await page.expectNavigation(() => page.evaluate('document.querySelector(".fe-batch-ready .fe-batch-apply").click()'));
   const reapplied = await page.evaluate('location.href');
   check(reapplied === applied, `Apply after Back gave ${reapplied}, expected ${applied}`);
-  return `bfcache restore: ${item.slug} unchecked, selection matches the URL, re-Apply gives the same URL`;
+  const path = fromCache ? 'bfcache restore' : `reload (cache not used: ${page.cacheNotUsed.join('; ') || 'disabled'})`;
+  return `${path}: ${item.slug} unchecked, selection matches the URL, re-Apply gives the same URL`;
 }
 
 async function replacedWrapperInitializedOnce(page) {
@@ -574,22 +586,55 @@ const SCENARIOS = [
   ['Space/Enter toggle exactly once', keyboardTogglesOnce],
   ['Tab moves between term checkboxes', tabMovesBetweenCheckboxes],
   ['Apply sets busy state and navigates once', applyNavigatesOnce],
-  ['Back (bfcache) restores the rendered state', backRestoresRenderedState],
+  ['Back restores the rendered state', page => backRestoresRenderedState(page, 'any')],
   ['replaced ancestor wrapper is initialized once', replacedWrapperInitializedOnce],
   ['DOM fallback without config builds the same query', domFallbackBuildsSameQuery],
   ['page without a widget is left untouched', pageWithoutWidgetIsUntouched],
+];
+
+// Run in a second browser without the back/forward cache.
+const NO_CACHE_SCENARIOS = [
+  ['Back without bfcache (reload) restores the rendered state', page => backRestoresRenderedState(page, 'off')],
 ];
 
 /* ------------------------------------------------------------------
  * Runner.
  * ------------------------------------------------------------------ */
 
+/** Runs `scenarios` in a new tab of `browser`, then closes the browser. Returns the failure count. */
+async function runScenarios(browser, scenarios) {
+  let failures = 0;
+  let tab = null;
+  let session = null;
+  try {
+    tab = await openTab(browser.endpoint);
+    session = await connect(tab.wsUrl);
+    const page = await createPage(session);
+    for (const [name, scenario] of scenarios) {
+      page.errors.length = 0;
+      try {
+        const detail = await scenario(page);
+        check(page.errors.length === 0, `Page errors: ${page.errors.join(' | ')}`);
+        console.log(`PASS  ${name}: ${detail}`);
+      } catch (error) {
+        failures++;
+        console.log(`FAIL  ${name}: ${error instanceof CheckFailure ? error.message : error.stack}`);
+      }
+    }
+  } finally {
+    if (session) session.close();
+    if (tab) await tab.close();
+    await browser.close();
+  }
+  return failures;
+}
+
 async function main() {
+  const executable = process.env.CDP_URL ? null : findBrowser();
   let browser;
   if (process.env.CDP_URL) {
     browser = { endpoint: process.env.CDP_URL.replace(/\/+$/, ''), close: async () => {} };
   } else {
-    const executable = findBrowser();
     if (!executable) {
       console.log('SKIPPED: no Chrome or Edge found (set CHROME_PATH or CDP_URL).');
       return 0;
@@ -605,38 +650,16 @@ async function main() {
     return 1;
   }
 
-  const tab = await openTab(browser.endpoint);
-  const session = await connect(tab.wsUrl);
-  let failures = 0;
-  let skipped = 0;
-  try {
-    const page = await createPage(session);
-    console.log(`Batch Apply smoke tests on ${BASE_URL} (archive ${ARCHIVE_PATH}, no widget ${NO_WIDGET_PATH})`);
-    for (const [name, scenario] of SCENARIOS) {
-      page.errors.length = 0;
-      try {
-        const detail = await scenario(page);
-        check(page.errors.length === 0, `Page errors: ${page.errors.join(' | ')}`);
-        console.log(`PASS  ${name}: ${detail}`);
-      } catch (error) {
-        if (error instanceof ScenarioSkip) {
-          skipped++;
-          console.log(`SKIP  ${name}: ${error.message}`);
-          continue;
-        }
-        failures++;
-        console.log(`FAIL  ${name}: ${error instanceof CheckFailure ? error.message : error.stack}`);
-      }
-    }
-  } finally {
-    session.close();
-    await tab.close();
-    await browser.close();
+  console.log(`Batch Apply smoke tests on ${BASE_URL} (archive ${ARCHIVE_PATH}, no widget ${NO_WIDGET_PATH})`);
+  let failures = await runScenarios(browser, SCENARIOS);
+  let total = SCENARIOS.length;
+  if (executable) {
+    failures += await runScenarios(await launchBrowser(executable, ['--disable-features=BackForwardCache']), NO_CACHE_SCENARIOS);
+    total += NO_CACHE_SCENARIOS.length;
+  } else {
+    console.log('NOTE  Back without bfcache is not run with CDP_URL; start that browser with --disable-features=BackForwardCache to cover it.');
   }
-  const skipNote = skipped ? ` (${skipped} skipped)` : '';
-  console.log(failures
-    ? `${failures} of ${SCENARIOS.length} scenarios failed${skipNote}.`
-    : `All ${SCENARIOS.length - skipped} scenarios run passed${skipNote}.`);
+  console.log(failures ? `${failures} of ${total} scenarios failed.` : `All ${total} scenarios passed.`);
   return failures ? 1 : 0;
 }
 

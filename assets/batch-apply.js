@@ -568,8 +568,13 @@
       const field = multiFieldFor(input, fields);
       return field ? selections.get(field.params[0]) || null : null;
     };
+    // Server-checked terms come from the `checked` attribute: when Back
+    // reloads the page (no back/forward cache, e.g. `Cache-Control: no-store`
+    // for logged-in users) the browser restores the `checked` property the
+    // visitor left behind, before (Firefox) or after (Chrome, at `load`)
+    // this runs.
     for (const input of inputs) {
-      if (input.checked) selectionFor(input)?.add(input.dataset.wpcSlug);
+      if (input.defaultChecked) selectionFor(input)?.add(input.dataset.wpcSlug);
     }
 
     // Sync all locally-rendered checkboxes from our local state.
@@ -689,6 +694,11 @@
       },
       restore() {
         restoreState(renderedState, selections, ranges);
+        this.resync();
+      },
+      // Inputs back in line with the local state (browser form restoration
+      // may have changed checkboxes and editor fields behind its back).
+      resync() {
         syncInputs();
         ranges.forEach(range => range.redraw());
       },
@@ -785,8 +795,14 @@
   // the DOM and this script's state are as the visitor left them (for
   // example a term checked right before Apply), so return every widget to
   // what the server rendered for this URL.
+  // Without that cache, Back reloads the page and the browser restores form
+  // control state; Chrome does it just before `load`, after init. The local
+  // state is already the rendered one, so only the inputs are redrawn.
   window.addEventListener('pageshow', event => {
-    if (!event.persisted) return;
+    if (!event.persisted) {
+      widgetControllers.forEach(controller => controller.resync());
+      return;
+    }
     widgetControllers.forEach(controller => {
       controller.restore();
       controller.release();

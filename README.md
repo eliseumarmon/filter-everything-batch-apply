@@ -79,7 +79,7 @@ Pure URL and config helpers in `assets/batch-apply.js` are covered by Node's bui
 node --test "tests/*.test.js"
 ```
 
-Browser smoke tests in `tests/e2e/smoke.mjs` drive a local Chrome or Edge over the DevTools protocol (Node 24, no dependencies) against a running site with Filter Everything and this add-on active. They check click and keyboard toggles (one tab stop per term, no scroll on Space), the Apply busy state and query, the state restored by Back from the back/forward cache, re-initialization after a replaced wrapper, the DOM fallback without configuration, and a page without a widget. They are not part of the unit test run:
+Browser smoke tests in `tests/e2e/smoke.mjs` drive a local Chrome or Edge over the DevTools protocol (Node 24, no dependencies) against a running site with Filter Everything and this add-on active. They check click and keyboard toggles (one tab stop per term, no scroll on Space), the Apply busy state and query, the state shown after Back (from the back/forward cache, and in a second browser launched without it, where Back reloads the page), re-initialization after a replaced wrapper, the DOM fallback without configuration, and a page without a widget. They are not part of the unit test run:
 
 ```sh
 node tests/e2e/smoke.mjs
@@ -94,7 +94,7 @@ BASE_URL=https://shop.test ARCHIVE_PATH=/product-category/shirts/ node tests/e2e
 | `CHROME_PATH` | Common Chrome/Edge install paths | Browser executable. |
 | `CDP_URL` | (unset) | Attach to a browser started with `--remote-debugging-port` instead of launching one. |
 
-The script exits with 0 when every scenario passes, 1 on a failure, and prints `SKIPPED` with exit 0 when no browser is found. A scenario the browser cannot run (Back without a back/forward cache restore) prints `SKIP` and does not fail the run. In Git Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` so path variables are not rewritten.
+The script exits with 0 when every scenario passes, 1 on a failure, and prints `SKIPPED` with exit 0 when no browser is found. The Back scenario reports whether the page came from the back/forward cache or was reloaded (with the browser's reasons); both paths are asserted. With `CDP_URL` the second, cache-less browser is not launched. In Git Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` so path variables are not rewritten.
 
 ## Changelog
 
@@ -111,6 +111,7 @@ The script exits with 0 when every scenario passes, 1 on a failure, and prints `
 - Stops observing the page after `load` when no Filter Everything widget was rendered (for example a product search without a sidebar); a widget first injected later on such a page is not handled.
 - Fields are resolved per filter set: two sets on one page that share a field source with different URL slugs each write their own parameter. Without set information, fields match by source name as before.
 - Back and Forward restore each widget to the state rendered for that URL (checked terms and range editors) when the browser brings the page back from its back/forward cache, instead of showing the selection left before navigating away.
+- Back without the back/forward cache (for example logged-in visitors, whose pages are sent with `Cache-Control: no-store`): server-checked terms are read from the `checked` attribute, and checkboxes and range editors are redrawn on `pageshow`, after the browser restores the form state left before Apply.
 - Keyboard: each term has a single tab stop (its checkbox; the term link is taken out of the tab order), Space and Enter toggle the focused term once without scrolling or following the link, and term checkboxes, range fields and handles, section toggles and Apply/Reset show a visible focus ring.
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters.
 - Requires WordPress 6.5 and declares the Filter Everything dependency.
