@@ -1,41 +1,73 @@
-/* global window, document */
-/* Filter Everything Batch Apply, proof of concept v0.1.4 */
+/* global window, document, module */
+/* Filter Everything Batch Apply v0.2.0 */
 (() => {
   'use strict';
 
-  // Specific to the taxonomy slugs and filter URL names of this shop.
-  const FIELDS = Object.freeze({
-    pa_colores: 'filtro_color',
-    pa_talla: 'filtro_talla',
-    product_brand: 'filtro_marca',
-    product_cat: 'filtro_categoria',
-  });
-  const PRICE_MIN = 'min_filtro_precio';
-  const PRICE_MAX = 'max_filtro_precio';
-  const ROOT_SELECTOR = '.wpc-filters-main-wrap';
-  const ITEM_SELECTOR = 'li.wpc-checkbox-item';
-  const INPUT_SELECTOR = 'input[type="checkbox"][data-wpc-e-name][data-wpc-slug]';
-  const initialized = new WeakSet();
+  const DEFAULT_SEPARATOR = ';';
+  const PAGINATION_PARAMS = ['paged', 'product-page'];
 
-  function getRootCandidates() {
-    let roots = [...document.querySelectorAll(ROOT_SELECTOR)];
-    if (!roots.length) {
-      roots = [...document.querySelectorAll('.wpc-filters-widget-wrapper')];
-    }
-    return roots.filter(root =>
-      root.querySelector(INPUT_SELECTOR) &&
-      !roots.some(other => other !== root && other.contains(root))
-    );
+  /* ------------------------------------------------------------------
+   * Pure helpers: no DOM access, exported for the Node test suite.
+   * ------------------------------------------------------------------ */
+
+  function parseValues(raw, separator) {
+    if (raw === null || raw === undefined || raw === '') return [];
+    return String(raw).split(separator || DEFAULT_SEPARATOR).filter(Boolean);
   }
 
-  function getSelectionsFromUrl() {
-    const url = new URL(window.location.href);
-    const selected = new Map();
-    for (const key of Object.values(FIELDS)) {
-      const raw = url.searchParams.get(key) || '';
-      selected.set(key, new Set(raw.split(';').filter(Boolean)));
+  function readSelection(href, param, separator) {
+    const url = new URL(href);
+    return new Set(parseValues(url.searchParams.get(param), separator));
+  }
+
+  function isParamList(params, length) {
+    return Array.isArray(params) && params.length === length &&
+      params.every(param => typeof param === 'string' && param !== '');
+  }
+
+  /**
+   * Map of eName => { eName, entity, view, params, kind } built from the
+   * config printed by PHP. `kind` is "multi" (checkboxes/labels, one param)
+   * or "range" (numeric range, min/max params). Invalid entries are skipped.
+   */
+  function buildFieldMap(config) {
+    const map = new Map();
+    const fields = config && Array.isArray(config.fields) ? config.fields : [];
+    for (const field of fields) {
+      if (!field || typeof field.eName !== 'string' || !field.eName || map.has(field.eName)) continue;
+      const view = typeof field.view === 'string' ? field.view : '';
+      const entity = typeof field.entity === 'string' ? field.entity : '';
+      let kind = null;
+      if (view === 'range' && isParamList(field.params, 2)) kind = 'range';
+      else if (view !== 'range' && isParamList(field.params, 1)) kind = 'multi';
+      if (!kind) continue;
+      map.set(field.eName, { eName: field.eName, entity, view, params: [...field.params], kind });
     }
-    return selected;
+    return map;
+  }
+
+  /**
+   * Fallback when no config is available: Filter Everything gives every
+   * checkbox a full toggle URL in `data-wpc-link`. The param whose values
+   * gain or lose `slug` compared with the current URL is the field param.
+   */
+  function deriveParamFromLink(link, currentHref, slug, separator) {
+    if (!link || !slug) return null;
+    let target;
+    let current;
+    try {
+      target = new URL(link, currentHref);
+      current = new URL(currentHref);
+    } catch (error) {
+      return null;
+    }
+    const keys = new Set([...target.searchParams.keys(), ...current.searchParams.keys()]);
+    for (const key of keys) {
+      const inTarget = parseValues(target.searchParams.get(key), separator).includes(slug);
+      const inCurrent = parseValues(current.searchParams.get(key), separator).includes(slug);
+      if (inTarget !== inCurrent) return key;
+    }
+    return null;
   }
 
   function safeNumber(value, fallback) {
@@ -44,59 +76,232 @@
     return Number.isFinite(number) ? number : fallback;
   }
 
-  function addPriceEditor(root) {
-    const originalMin = root.querySelector('input.wpc-filters-range-min');
-    const originalMax = root.querySelector('input.wpc-filters-range-max');
-    if (!originalMin || !originalMax) return null;
+  /** Whole-number bounds from the native inputs' data-min/data-max/value. */
+  function computeBounds(dataMin, dataMax, valueMin, valueMax) {
+    const absoluteMin = safeNumber(dataMin, safeNumber(valueMin, 0));
+    const absoluteMax = safeNumber(dataMax, safeNumber(valueMax, absoluteMin + 1));
+    return {
+      lowerBound: Math.floor(Math.min(absoluteMin, absoluteMax)),
+      upperBound: Math.ceil(Math.max(absoluteMin + 1, absoluteMax)),
+    };
+  }
 
-    const section = originalMin.closest('.wpc-filters-section');
-    if (!section || !section.contains(originalMax)) return null;
+  function clampRange(min, max, lowerBound, upperBound) {
+    const clampedMin = Math.max(lowerBound, Math.min(upperBound, Math.round(min)));
+    const clampedMax = Math.max(clampedMin, Math.min(upperBound, Math.round(max)));
+    return { min: clampedMin, max: clampedMax };
+  }
+
+  function initialRange(href, params, lowerBound, upperBound) {
+    const url = new URL(href);
+    return clampRange(
+      safeNumber(url.searchParams.get(params[0]), lowerBound),
+      safeNumber(url.searchParams.get(params[1]), upperBound),
+      lowerBound,
+      upperBound
+    );
+  }
+
+  /**
+   * What Apply does with one range: "keep" whatever the URL has, "clear"
+   * its params, or "set" the chosen bounds.
+   */
+  function rangeAction(state) {
+    if (!state.changed) return 'keep';
+    if (state.reset) return 'clear';
+    return 'set';
+  }
+
+  function stripPagination(url) {
+    for (const param of PAGINATION_PARAMS) url.searchParams.delete(param);
+    // WooCommerce may use pretty permalinks for pagination (/page/2/).
+    url.pathname = url.pathname.replace(/\/page\/\d+\/?$/, '/');
+    return url;
+  }
+
+  /**
+   * Apply URL. Multi-value params are rewritten from the local selection;
+   * unrelated params keep their place; pagination is reset. Same output
+   * as 0.1.4 (multi params first, then range params).
+   */
+  function buildApplyUrl(href, { multi = [], ranges = [], separator = DEFAULT_SEPARATOR } = {}) {
+    const url = new URL(href);
+    for (const { param } of multi) url.searchParams.delete(param);
+    for (const range of ranges) {
+      if (range.action === 'keep') continue;
+      for (const param of range.params) url.searchParams.delete(param);
+    }
+    stripPagination(url);
+    for (const { param, values } of multi) {
+      const selected = [...values];
+      if (selected.length) url.searchParams.set(param, selected.join(separator));
+    }
+    for (const range of ranges) {
+      if (range.action !== 'set') continue;
+      url.searchParams.set(range.params[0], String(range.min));
+      url.searchParams.set(range.params[1], String(range.max));
+    }
+    return url.href;
+  }
+
+  /** Reset URL: drops every managed param and pagination, keeps the rest. */
+  function buildResetUrl(href, params) {
+    const url = new URL(href);
+    for (const param of params) url.searchParams.delete(param);
+    return stripPagination(url).href;
+  }
+
+  const helpers = {
+    parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
+    computeBounds, clampRange, initialRange, rangeAction, stripPagination,
+    buildApplyUrl, buildResetUrl,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = helpers;
+    return;
+  }
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  /* ------------------------------------------------------------------
+   * Browser wiring.
+   * ------------------------------------------------------------------ */
+
+  const rawConfig = window.feBatchApplyConfig;
+  const hasConfig = Boolean(rawConfig && typeof rawConfig === 'object' && Array.isArray(rawConfig.fields));
+  const SEPARATOR = hasConfig && typeof rawConfig.separator === 'string' && rawConfig.separator
+    ? rawConfig.separator
+    : DEFAULT_SEPARATOR;
+  const RESET_PRESENTATION = !hasConfig || rawConfig.resetPresentation !== false;
+  const STRINGS = Object.assign({
+    apply: 'Aplicar filtros',
+    reset: 'Restablecer',
+    from: 'Desde',
+    to: 'Hasta',
+    minPrice: 'Precio mínimo',
+    maxPrice: 'Precio máximo',
+    minValue: 'Mínimo',
+    maxValue: 'Máximo',
+  }, hasConfig && rawConfig.strings && typeof rawConfig.strings === 'object' ? rawConfig.strings : {});
+  const CURRENCY = hasConfig && typeof rawConfig.currencySymbol === 'string' ? rawConfig.currencySymbol : '€';
+
+  const configFields = buildFieldMap(rawConfig);
+  // Without config, fields are discovered from the markup (see multiFieldFor).
+  const discoveredFields = new Map();
+
+  const ROOT_SELECTOR = '.wpc-filters-main-wrap';
+  const ITEM_SELECTOR = 'li.wpc-checkbox-item, li.wpc-label-item';
+  const INPUT_SELECTOR = 'input[type="checkbox"][data-wpc-e-name][data-wpc-slug]';
+  const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
+  const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
+  const initialized = new WeakSet();
+
+  function multiFieldFor(input) {
+    const eName = input.dataset.wpcEName;
+    if (hasConfig) {
+      const field = configFields.get(eName);
+      return field && field.kind === 'multi' ? field : null;
+    }
+    if (discoveredFields.has(eName)) return discoveredFields.get(eName);
+    const param = deriveParamFromLink(input.dataset.wpcLink, window.location.href, input.dataset.wpcSlug, SEPARATOR);
+    if (!param) return null;
+    const field = { eName, entity: '', view: '', params: [param], kind: 'multi' };
+    discoveredFields.set(eName, field);
+    return field;
+  }
+
+  function findRangePair(minInput) {
+    const section = minInput.closest('.wpc-filters-section');
+    const maxInput = section && section.querySelector(RANGE_MAX_SELECTOR);
+    return maxInput ? { section, minInput, maxInput } : null;
+  }
+
+  function rangeFieldFor(minInput, maxInput) {
+    if (hasConfig) {
+      const field = configFields.get(minInput.dataset.wpcEName);
+      return field && field.kind === 'range' ? field : null;
+    }
+    // Native range inputs carry their URL param in `name`.
+    if (!minInput.name || !maxInput.name) return null;
+    return { eName: minInput.dataset.wpcEName || '', entity: '', view: 'range', params: [minInput.name, maxInput.name], kind: 'range' };
+  }
+
+  function supportedInputs(root) {
+    return [...root.querySelectorAll(INPUT_SELECTOR)].filter(input => input.closest(ITEM_SELECTOR) && multiFieldFor(input));
+  }
+
+  function supportedRanges(root) {
+    const ranges = [];
+    for (const minInput of root.querySelectorAll(RANGE_MIN_SELECTOR)) {
+      const pair = findRangePair(minInput);
+      const field = pair && rangeFieldFor(pair.minInput, pair.maxInput);
+      if (field) ranges.push(Object.assign(pair, { field }));
+    }
+    return ranges;
+  }
+
+  function getRootCandidates() {
+    let roots = [...document.querySelectorAll(ROOT_SELECTOR)];
+    if (!roots.length) {
+      roots = [...document.querySelectorAll('.wpc-filters-widget-wrapper')];
+    }
+    return roots.filter(root =>
+      (supportedInputs(root).length || supportedRanges(root).length) &&
+      !roots.some(other => other !== root && other.contains(root))
+    );
+  }
+
+  function createElement(tag, className, properties) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (properties) Object.assign(element, properties);
+    return element;
+  }
+
+  function addRangeEditor({ section, minInput: originalMin, maxInput: originalMax, field }) {
     const nativeContent = section.querySelector('.wpc-filter-content');
     // Do not render duplicate inputs if this release finds unknown markup.
     // The native content wrapper is essential to preserve Folding behavior.
     if (!nativeContent || !nativeContent.contains(originalMin)) {
-      console.warn('[FE Batch Apply] Estructura de precio no reconocida; sin reemplazo visual.');
+      console.warn('[FE Batch Apply] Unrecognized range markup; keeping the native control.');
       return null;
     }
 
-    const absoluteMin = safeNumber(originalMin.dataset.min, safeNumber(originalMin.value, 0));
-    const absoluteMax = safeNumber(originalMax.dataset.max, safeNumber(originalMax.value, absoluteMin + 1));
-    const lowerBound = Math.floor(Math.min(absoluteMin, absoluteMax));
-    const upperBound = Math.ceil(Math.max(absoluteMin + 1, absoluteMax));
-    const applied = new URL(window.location.href);
-    let chosenMin = safeNumber(applied.searchParams.get(PRICE_MIN), lowerBound);
-    let chosenMax = safeNumber(applied.searchParams.get(PRICE_MAX), upperBound);
-    chosenMin = Math.max(lowerBound, Math.min(upperBound, Math.round(chosenMin)));
-    chosenMax = Math.max(chosenMin, Math.min(upperBound, Math.round(chosenMax)));
+    const { lowerBound, upperBound } = computeBounds(
+      originalMin.dataset.min, originalMax.dataset.max, originalMin.value, originalMax.value
+    );
+    const chosen = initialRange(window.location.href, field.params, lowerBound, upperBound);
+    const isPrice = field.eName === '_price';
+    const suffix = isPrice && CURRENCY ? ` (${CURRENCY})` : '';
 
-    const editor = document.createElement('div');
-    editor.className = 'fe-batch-price-editor';
-    editor.innerHTML = `
-      <div class="fe-batch-price-numbers">
-        <label><span>Desde (€)</span><input class="fe-batch-price-number" type="number" step="1"></label>
-        <label><span>Hasta (€)</span><input class="fe-batch-price-number" type="number" step="1"></label>
-      </div>
-      <div class="fe-batch-dual-range">
-        <div class="fe-batch-range-track"></div>
-        <div class="fe-batch-range-selection"></div>
-        <input type="range" class="fe-batch-range-min" aria-label="Precio mínimo">
-        <input type="range" class="fe-batch-range-max" aria-label="Precio máximo">
-      </div>`;
+    const editor = createElement('div', 'fe-batch-price-editor');
+    const numbers = createElement('div', 'fe-batch-price-numbers');
+    const fromInput = createElement('input', 'fe-batch-price-number', { type: 'number', step: '1' });
+    const toInput = createElement('input', 'fe-batch-price-number', { type: 'number', step: '1' });
+    [[STRINGS.from, fromInput], [STRINGS.to, toInput]].forEach(([text, input]) => {
+      const label = createElement('label');
+      label.append(createElement('span', '', { textContent: text + suffix }), input);
+      numbers.append(label);
+    });
+    const dualRange = createElement('div', 'fe-batch-dual-range');
+    const selection = createElement('div', 'fe-batch-range-selection');
+    const fromSlider = createElement('input', 'fe-batch-range-min', { type: 'range' });
+    const toSlider = createElement('input', 'fe-batch-range-max', { type: 'range' });
+    fromSlider.setAttribute('aria-label', isPrice ? STRINGS.minPrice : STRINGS.minValue);
+    toSlider.setAttribute('aria-label', isPrice ? STRINGS.maxPrice : STRINGS.maxValue);
+    dualRange.append(createElement('div', 'fe-batch-range-track'), selection, fromSlider, toSlider);
+    editor.append(numbers, dualRange);
 
-    const [fromInput, toInput] = editor.querySelectorAll('.fe-batch-price-number');
-    const fromSlider = editor.querySelector('.fe-batch-range-min');
-    const toSlider = editor.querySelector('.fe-batch-range-max');
-    const selection = editor.querySelector('.fe-batch-range-selection');
     [fromInput, toInput, fromSlider, toSlider].forEach(input => {
       input.min = String(lowerBound);
       input.max = String(upperBound);
     });
-    // One-euro increments for both slider handles and numeric fields.
+    // Whole-unit increments for both slider handles and numeric fields.
     fromSlider.step = '1';
     toSlider.step = '1';
 
     const state = {
-      changed: false, reset: false, min: chosenMin, max: chosenMax,
+      params: field.params, changed: false, reset: false, min: chosen.min, max: chosen.max,
       lowerBound, upperBound, originalMin, originalMax,
     };
 
@@ -115,8 +320,9 @@
       selection.style.width = `${Math.max(0, right - left)}%`;
     };
     const update = (min, max) => {
-      state.min = Math.max(lowerBound, Math.min(upperBound, Math.round(min)));
-      state.max = Math.max(state.min, Math.min(upperBound, Math.round(max)));
+      const next = clampRange(min, max, lowerBound, upperBound);
+      state.min = next.min;
+      state.max = next.max;
       state.changed = true;
       state.reset = false;
       redraw();
@@ -144,7 +350,7 @@
     };
     redraw();
 
-    // Hide all of the plugin's original *price content*, including the
+    // Hide all of the plugin's original *range content*, including the
     // two-handle jQuery slider. Do not hide the filter header: Folding needs it.
     // Retain nodes in the DOM for plugin compatibility, but replace only UI.
     [...nativeContent.children].forEach(node => {
@@ -172,12 +378,13 @@
 
   /**
    * Force a predictable INITIAL view without disabling user interaction.
-   * Sections start expanded; More/Less starts in "show 5 / Ver más" mode.
+   * Sections start expanded; More/Less starts in its collapsed "show more" mode.
    * Filter Everything continues to handle the header and More/Less clicks.
    * Do not rerun this on every DOM mutation: a visitor may close a section
-   * or choose Ver más during their current visit.
+   * or expand More/Less during their current visit.
    */
   function setInitialPresentation(root) {
+    if (!RESET_PRESENTATION) return;
     root.querySelectorAll('.wpc-filters-section').forEach(section => {
       if (section.classList.contains('wpc-filter-collapsible') &&
           section.querySelector('.wpc-filter-title button')) {
@@ -200,42 +407,55 @@
     if (initialized.has(root)) return;
     initialized.add(root);
 
-    const selections = getSelectionsFromUrl();
-    const inputs = [...root.querySelectorAll(INPUT_SELECTOR)];
+    const inputs = supportedInputs(root);
+    // Config order keeps the 0.1.4 param order; discovered fields follow the DOM.
+    const multiFields = hasConfig
+      ? [...configFields.values()].filter(field => field.kind === 'multi')
+      : [...new Set(inputs.map(multiFieldFor))];
+    const selections = new Map(multiFields.map(field =>
+      [field.params[0], readSelection(window.location.href, field.params[0], SEPARATOR)]
+    ));
+    const selectionFor = input => {
+      const field = multiFieldFor(input);
+      return field ? selections.get(field.params[0]) || null : null;
+    };
     for (const input of inputs) {
-      const param = FIELDS[input.dataset.wpcEName];
-      if (!param) continue;
-      if (input.checked) selections.get(param).add(input.dataset.wpcSlug);
+      if (input.checked) selectionFor(input)?.add(input.dataset.wpcSlug);
     }
 
     // Sync all locally-rendered checkboxes from our local state.
     const syncInputs = () => {
       for (const input of root.querySelectorAll(INPUT_SELECTOR)) {
-        const param = FIELDS[input.dataset.wpcEName];
-        if (!param) continue;
-        const isChecked = selections.get(param).has(input.dataset.wpcSlug);
+        const set = selectionFor(input);
+        if (!set) continue;
+        const isChecked = set.has(input.dataset.wpcSlug);
         input.checked = isChecked;
         input.closest(ITEM_SELECTOR)?.classList.toggle('wpc-term-selected', isChecked);
       }
     };
     syncInputs();
 
-    const price = addPriceEditor(root);
+    const ranges = supportedRanges(root).map(addRangeEditor).filter(Boolean);
+    const managedParams = hasConfig
+      ? [...configFields.values()].flatMap(field => field.params)
+      : [...multiFields.flatMap(field => field.params), ...ranges.flatMap(range => range.params)];
+
+    const toggle = input => {
+      const set = selectionFor(input);
+      const slug = input.dataset.wpcSlug;
+      if (set.has(slug)) set.delete(slug);
+      else set.add(slug);
+    };
 
     // Stop propagation before Filter Everything's delegated listeners run.
     root.addEventListener('click', event => {
       const li = event.target.closest?.(ITEM_SELECTOR);
       if (!li || !root.contains(li)) return;
       const input = li.querySelector(INPUT_SELECTOR);
-      const param = input && FIELDS[input.dataset.wpcEName];
-      if (!param) return;
+      if (!input || !selectionFor(input)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      const slug = input.dataset.wpcSlug;
-      const set = selections.get(param);
-      const nextChecked = !set.has(slug);
-      if (nextChecked) set.add(slug);
-      else set.delete(slug);
+      toggle(input);
       // Native checkbox default action may undo `.checked` after preventDefault.
       window.setTimeout(syncInputs, 0);
     }, true);
@@ -244,81 +464,48 @@
       const el = event.target;
       if (!el.matches?.(INPUT_SELECTOR)) return;
       if (event.key !== ' ' && event.key !== 'Enter') return;
-      const param = FIELDS[el.dataset.wpcEName];
-      if (!param) return;
+      if (!selectionFor(el)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      const set = selections.get(param);
-      if (set.has(el.dataset.wpcSlug)) set.delete(el.dataset.wpcSlug);
-      else set.add(el.dataset.wpcSlug);
+      toggle(el);
       syncInputs();
     }, true);
 
-    const controls = document.createElement('div');
-    controls.className = 'fe-batch-controls';
-    const applyButton = document.createElement('button');
-    applyButton.type = 'button';
-    applyButton.className = 'fe-batch-apply';
-    applyButton.textContent = 'Aplicar filtros';
-    const resetButton = document.createElement('button');
-    resetButton.type = 'button';
-    resetButton.className = 'fe-batch-reset';
-    resetButton.textContent = 'Restablecer';
+    const controls = createElement('div', 'fe-batch-controls');
+    const applyButton = createElement('button', 'fe-batch-apply', { type: 'button', textContent: STRINGS.apply });
+    const resetButton = createElement('button', 'fe-batch-reset', { type: 'button', textContent: STRINGS.reset });
     controls.append(applyButton, resetButton);
     root.append(controls);
     root.classList.add('fe-batch-ready');
     hideNativeButtons(root);
     setInitialPresentation(root);
 
+    // Reset clears BOTH locally pending and already-applied criteria.
+    // On an already filtered URL it navigates once, removing the visible chips.
+    // If nothing is applied yet, it simply clears the pending selections.
     resetButton.addEventListener('click', () => {
-      for (const key of Object.values(FIELDS)) selections.get(key).clear();
-      price?.resetValue();
+      for (const set of selections.values()) set.clear();
+      ranges.forEach(range => range.resetValue());
       syncInputs();
-      const cleanUrl = buildBaseUrl();
-      if (cleanUrl.href !== window.location.href) {
-        // A single navigation removes active filters and their chip summaries.
-        window.location.assign(cleanUrl.href);
+      const cleanUrl = buildResetUrl(window.location.href, managedParams);
+      if (cleanUrl !== window.location.href) {
+        window.location.assign(cleanUrl);
       } else {
-        // No applied filters; clear only the pending choices in this widget.
         applyButton.focus();
       }
     });
 
-    // Reset should clear BOTH locally pending and already-applied criteria.
-    // On an already filtered URL it navigates once, removing the visible chips.
-    // If nothing is applied yet, it simply clears the pending selections.
-    const buildBaseUrl = (clearPrice = true) => {
-      const url = new URL(window.location.href);
-      for (const key of Object.values(FIELDS)) url.searchParams.delete(key);
-      if (clearPrice) {
-        url.searchParams.delete(PRICE_MIN);
-        url.searchParams.delete(PRICE_MAX);
-      }
-      url.searchParams.delete('paged');
-      url.searchParams.delete('product-page');
-      url.pathname = url.pathname.replace(/\/page\/\d+\/?$/, '/');
-      return url;
-    };
-
     applyButton.addEventListener('click', () => {
-      if (price && price.changed && !price.reset) price.commit();
-      const url = buildBaseUrl(Boolean(price?.changed));
-      for (const key of Object.values(FIELDS)) {
-        const selected = selections.get(key);
-        if (selected.size) url.searchParams.set(key, [...selected].join(';'));
-      }
-      if (price?.changed) {
-        if (!price.reset) {
-          url.searchParams.set(PRICE_MIN, String(price.min));
-          url.searchParams.set(PRICE_MAX, String(price.max));
-        }
-      }
-      url.searchParams.delete('paged');
-      url.searchParams.delete('product-page');
-      // WooCommerce may use pretty permalinks for pagination (/page/2/).
-      url.pathname = url.pathname.replace(/\/page\/\d+\/?$/, '/');
-      if (url.href !== window.location.href) {
-        window.location.assign(url.href);
+      const href = buildApplyUrl(window.location.href, {
+        separator: SEPARATOR,
+        multi: multiFields.map(field => ({ param: field.params[0], values: selections.get(field.params[0]) })),
+        ranges: ranges.map(range => {
+          if (range.changed && !range.reset) range.commit();
+          return { params: range.params, action: rangeAction(range), min: range.min, max: range.max };
+        }),
+      });
+      if (href !== window.location.href) {
+        window.location.assign(href);
       }
     });
   }
