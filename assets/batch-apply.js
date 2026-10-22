@@ -5,6 +5,11 @@
 
   const DEFAULT_SEPARATOR = ';';
   const PAGINATION_PARAMS = ['paged', 'product-page'];
+  // Apply/Reset stay busy while the next page loads. Slow servers can take
+  // about 20 s to respond, so give up only well after that: a navigation
+  // that never commits (Stop, cancelled unload, 204, download) must not
+  // leave both buttons disabled.
+  const NAVIGATION_TIMEOUT_MS = 30000;
 
   /* ------------------------------------------------------------------
    * Pure helpers: no DOM access, exported for the Node test suite.
@@ -173,10 +178,34 @@
     return stripPagination(url).href;
   }
 
+  /**
+   * One pending-navigation timer: `start()` (re)arms it, `cancel()` clears
+   * it, and `onExpire` runs if it was neither cancelled nor restarted.
+   * `timers` is injectable for tests.
+   */
+  function createNavigationGuard(onExpire, { timeout = NAVIGATION_TIMEOUT_MS, timers = globalThis } = {}) {
+    let timerId = null;
+    const cancel = () => {
+      if (timerId !== null) timers.clearTimeout(timerId);
+      timerId = null;
+    };
+    return {
+      start() {
+        cancel();
+        timerId = timers.setTimeout(() => {
+          timerId = null;
+          onExpire();
+        }, timeout);
+      },
+      cancel,
+      get pending() { return timerId !== null; },
+    };
+  }
+
   const helpers = {
     parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
-    buildApplyUrl, buildResetUrl,
+    buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -219,8 +248,9 @@
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
   const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
   const initialized = new WeakSet();
-  // Restores Apply/Reset when the page comes back from the back/forward cache.
-  const busyResetters = [];
+  // Busy state of each Apply/Reset pair: released on a back/forward cache
+  // restore, timer cancelled when the page is hidden.
+  const busyControllers = [];
 
   function multiFieldFor(input) {
     const eName = input.dataset.wpcEName;
@@ -520,11 +550,20 @@
       }
       applyButton.textContent = value && clicked === applyButton ? STRINGS.busy : STRINGS.apply;
     };
+    const releaseBusy = () => setBusy(false);
+    const navigationGuard = createNavigationGuard(releaseBusy);
     const navigate = (href, clicked) => {
       setBusy(true, clicked);
+      navigationGuard.start();
       window.location.assign(href);
     };
-    busyResetters.push(() => setBusy(false));
+    busyControllers.push({
+      release() {
+        navigationGuard.cancel();
+        releaseBusy();
+      },
+      cancelTimer: navigationGuard.cancel,
+    });
 
     // Reset clears BOTH locally pending and already-applied criteria.
     // On an already filtered URL it navigates once, removing the visible chips.
@@ -598,10 +637,16 @@
     initializeAll();
   }
 
+  // The page is unloading or entering the back/forward cache: the pending
+  // navigation committed, so its timeout must not fire later.
+  window.addEventListener('pagehide', () => {
+    busyControllers.forEach(controller => controller.cancelTimer());
+  });
+
   // A back/forward cache restore is a navigation without a new page load.
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
-    busyResetters.forEach(reset => reset());
+    busyControllers.forEach(controller => controller.release());
     for (const root of getRootCandidates()) setInitialPresentation(root);
   });
 })();

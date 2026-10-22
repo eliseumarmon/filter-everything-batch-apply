@@ -89,6 +89,7 @@ node --test "tests/*.test.js"
 - DOM fallback that derives parameters from Filter Everything's markup when no configuration is available.
 - Translatable English strings, Spanish translation, currency symbol from WooCommerce.
 - Busy state on Apply/Reset, no range parameters for untouched full ranges, single toggle on Space/Enter, narrower DOM observation.
+- Apply/Reset leave the busy state after 30 seconds when the navigation never commits (Stop, cancelled unload, 204 response or download).
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters.
 - Requires WordPress 6.5 and declares the Filter Everything dependency.
 

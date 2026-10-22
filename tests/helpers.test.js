@@ -239,3 +239,55 @@ test('isRangeApplied detects either bound in the URL', () => {
   assert.equal(helpers.isRangeApplied(`${BASE}?min_filtro_precio=4`, params), true);
   assert.equal(helpers.isRangeApplied(`${BASE}?orderby=price`, params), false);
 });
+
+/** Manual clock for timer-based helpers. */
+function fakeTimers() {
+  let now = 0;
+  let nextId = 1;
+  const queue = new Map();
+  return {
+    setTimeout(fn, delay) { const id = nextId++; queue.set(id, { fn, at: now + delay }); return id; },
+    clearTimeout(id) { queue.delete(id); },
+    advance(ms) {
+      now += ms;
+      for (const [id, timer] of [...queue]) {
+        if (timer.at <= now) { queue.delete(id); timer.fn(); }
+      }
+    },
+    get size() { return queue.size; },
+  };
+}
+
+test('NAVIGATION_TIMEOUT_MS allows a slow 20 s server response', () => {
+  assert.equal(helpers.NAVIGATION_TIMEOUT_MS, 30000);
+});
+
+test('createNavigationGuard releases the busy state when navigation never commits', () => {
+  const timers = fakeTimers();
+  let released = 0;
+  const guard = helpers.createNavigationGuard(() => { released++; }, { timers });
+  guard.start();
+  assert.equal(guard.pending, true);
+  timers.advance(helpers.NAVIGATION_TIMEOUT_MS - 1);
+  assert.equal(released, 0);
+  timers.advance(1);
+  assert.equal(released, 1);
+  assert.equal(guard.pending, false);
+});
+
+test('createNavigationGuard cancel and restart keep a single timer', () => {
+  const timers = fakeTimers();
+  let released = 0;
+  const guard = helpers.createNavigationGuard(() => { released++; }, { timers, timeout: 100 });
+  guard.start();
+  timers.advance(60);
+  guard.start();
+  assert.equal(timers.size, 1);
+  timers.advance(60);
+  assert.equal(released, 0);
+  guard.cancel();
+  assert.equal(guard.pending, false);
+  timers.advance(1000);
+  assert.equal(released, 0);
+  guard.cancel();
+});
