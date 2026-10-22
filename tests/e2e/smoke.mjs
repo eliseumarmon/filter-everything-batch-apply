@@ -250,8 +250,12 @@ async function createPage(session) {
     return 'mouse';
   }
 
-  /** Presses Space, Enter or Tab on the focused element with real key input. */
-  async function press(key) {
+  /**
+   * Presses Space, Enter or Tab on the focused element with real key input.
+   * `modifiers` is the DevTools bit mask (1 Alt, 2 Ctrl, 4 Meta, 8 Shift);
+   * `keyUp: false` sends only the key down.
+   */
+  async function press(key, { modifiers = 0, keyUp = true } = {}) {
     const keys = {
       Space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' },
       Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' },
@@ -259,8 +263,8 @@ async function createPage(session) {
     };
     const { text, ...definition } = keys[key];
     // Keys without text (Tab) are raw key downs, as with a real keyboard.
-    await send('Input.dispatchKeyEvent', text ? { type: 'keyDown', ...definition, text } : { type: 'rawKeyDown', ...definition });
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', ...definition });
+    await send('Input.dispatchKeyEvent', text ? { type: 'keyDown', ...definition, text, modifiers } : { type: 'rawKeyDown', ...definition, modifiers });
+    if (keyUp) await send('Input.dispatchKeyEvent', { type: 'keyUp', ...definition, modifiers });
   }
 
   return { send, evaluate, waitUntil, expectNavigation, goto, click, press, documentRequests, errors, cacheNotUsed };
@@ -369,7 +373,29 @@ async function keyboardTogglesOnce(page) {
     check(await page.evaluate('window.scrollY') === 0, `${key} scrolled the page`);
   }
   check(page.documentRequests.length === requests, 'A key press navigated');
-  return 'Space, Space, Enter, Enter toggled once each, no scroll';
+
+  // Enter with Alt, Ctrl, Meta or Shift is left to the browser: it reaches
+  // window listeners with its default intact and toggles nothing.
+  await page.evaluate(`(() => {
+    window.__smokeKeys = [];
+    addEventListener('keydown', event => { window.__smokeKeys.push(event.defaultPrevented); });
+  })()`);
+  for (const [name, modifiers] of [['Alt', 1], ['Ctrl', 2], ['Meta', 4], ['Shift', 8]]) {
+    await page.press('Enter', { modifiers });
+    await expectChecked(page, 0, false, `${name}+Enter`);
+  }
+  const seen = await page.evaluate('window.__smokeKeys');
+  check(seen.length === 4 && seen.every(prevented => !prevented), `Modified Enter was handled by the add-on: ${JSON.stringify(seen)}`);
+
+  // A Space key-up that never arrives (focus moved away while the key was
+  // down) must not swallow a later screen-reader click (detail 0).
+  await page.evaluate(`document.querySelector('${itemSelector(0)} input[type="checkbox"]').focus()`);
+  await page.press('Space', { keyUp: false });
+  await expectChecked(page, 0, true, 'Space key-down');
+  await page.press('Tab');
+  await page.evaluate(`document.querySelector('${itemSelector(0)} input[type="checkbox"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }))`);
+  await expectChecked(page, 0, false, 'screen-reader click after a lost Space key-up');
+  return 'Space, Space, Enter, Enter toggled once each, no scroll; modified Enter ignored; lost Space key-up cleared';
 }
 
 async function tabMovesBetweenCheckboxes(page) {

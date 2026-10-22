@@ -293,11 +293,20 @@
     return boxBelow ? target.bottom - box.top + margin : target.top - box.bottom - margin;
   }
 
+  /**
+   * Space or Enter without Shift, Ctrl, Alt or Meta: the keys that toggle a
+   * focused term. Modified keys stay with the browser and assistive tech.
+   */
+  function isTermToggleKey(event) {
+    return (event.key === ' ' || event.key === 'Enter') &&
+      !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+  }
+
   const helpers = {
     parseValues, readSelection, rootSetId, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS, mutationsAddWidget,
-    snapshotState, restoreState, revealDelta,
+    snapshotState, restoreState, revealDelta, isTermToggleKey,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -733,14 +742,15 @@
     // mouse click focused it) toggle it here exactly once. Their defaults
     // are prevented: Space would scroll the page from a link, Enter would
     // follow the link or submit a form. A browser that still clicks the
-    // checkbox on the Space key-up gets that click swallowed above.
+    // checkbox on the Space key-up gets that click swallowed above. With
+    // Shift, Ctrl, Alt or Meta the key is left to the browser.
     const keyTerm = el => {
       const li = el.closest?.(ITEM_SELECTOR);
       const input = li && root.contains(li) ? li.querySelector(INPUT_SELECTOR) : null;
       return input && selectionFor(input) ? input : null;
     };
     root.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (!isTermToggleKey(event)) return;
       const input = keyTerm(event.target);
       if (!input) return;
       event.preventDefault();
@@ -755,6 +765,9 @@
       event.preventDefault();
       window.setTimeout(() => { keyClickInput = null; }, 0);
     }, true);
+    // The key-up may never come (focus moved, window switched): once focus
+    // moves, a later click without a pointer (screen reader) must toggle.
+    root.addEventListener('focusout', () => { keyClickInput = null; });
 
     const controls = createElement('div', 'fe-batch-controls');
     const applyButton = createElement('button', 'fe-batch-apply', { type: 'button', textContent: STRINGS.apply });

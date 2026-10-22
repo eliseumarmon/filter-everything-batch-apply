@@ -424,3 +424,16 @@ test('revealDelta is 0 when the control and the box do not overlap', () => {
   // An empty box (hidden) never overlaps.
   assert.equal(helpers.revealDelta({ top: 820, bottom: 840, left: 20, right: 40 }, { top: 0, bottom: 0, left: 0, right: 0 }, 12), 0);
 });
+
+test('isTermToggleKey accepts plain Space and Enter only', () => {
+  const key = (k, mods = {}) => Object.assign({ key: k, shiftKey: false, ctrlKey: false, altKey: false, metaKey: false }, mods);
+  assert.equal(helpers.isTermToggleKey(key(' ')), true);
+  assert.equal(helpers.isTermToggleKey(key('Enter')), true);
+  assert.equal(helpers.isTermToggleKey(key('Tab')), false);
+  assert.equal(helpers.isTermToggleKey(key('a')), false);
+  // Modified keys are left to the browser (shortcuts, assistive tech).
+  for (const modifier of ['shiftKey', 'ctrlKey', 'altKey', 'metaKey']) {
+    assert.equal(helpers.isTermToggleKey(key(' ', { [modifier]: true })), false, `Space + ${modifier}`);
+    assert.equal(helpers.isTermToggleKey(key('Enter', { [modifier]: true })), false, `Enter + ${modifier}`);
+  }
+});

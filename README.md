@@ -79,7 +79,7 @@ Pure URL and config helpers in `assets/batch-apply.js` are covered by Node's bui
 node --test "tests/*.test.js"
 ```
 
-Browser smoke tests in `tests/e2e/smoke.mjs` drive a local Chrome or Edge over the DevTools protocol (Node 24, no dependencies) against a running site with Filter Everything and this add-on active. They check click and keyboard toggles (one tab stop per term, no scroll on Space, focused controls never under the Apply/Reset box), the Apply busy state and query, the state shown after Back (from the back/forward cache, and in a second browser launched without it, where Back reloads the page), re-initialization after a replaced wrapper, the DOM fallback without configuration, and a page without a widget. They are not part of the unit test run:
+Browser smoke tests in `tests/e2e/smoke.mjs` drive a local Chrome or Edge over the DevTools protocol (Node 24, no dependencies) against a running site with Filter Everything and this add-on active. They check click and keyboard toggles (one tab stop per term, no scroll on Space, focused controls never under the Apply/Reset box, modified keys ignored, no stale Space state), the Apply busy state and query, the state shown after Back (from the back/forward cache, and in a second browser launched without it, where Back reloads the page), re-initialization after a replaced wrapper, the DOM fallback without configuration, and a page without a widget. They are not part of the unit test run:
 
 ```sh
 node tests/e2e/smoke.mjs
@@ -112,9 +112,10 @@ The script exits with 0 when every scenario passes, 1 on a failure, and prints `
 - Fields are resolved per filter set: two sets on one page that share a field source with different URL slugs each write their own parameter. Without set information, fields match by source name as before.
 - Back and Forward restore each widget to the state rendered for that URL (checked terms and range editors) when the browser brings the page back from its back/forward cache, instead of showing the selection left before navigating away.
 - Back without the back/forward cache (for example logged-in visitors, whose pages are sent with `Cache-Control: no-store`): server-checked terms are read from the `checked` attribute, and checkboxes and range editors are redrawn on `pageshow`, after the browser restores the form state left before Apply.
-- Keyboard: each term has a single tab stop (its checkbox; the term link is taken out of the tab order), Space and Enter toggle the focused term once without scrolling or following the link, and term checkboxes, range fields and handles, section toggles and Apply/Reset show a visible focus ring.
+- Keyboard: each term has a single tab stop (its checkbox; the term link is taken out of the tab order), Space and Enter toggle the focused term once without scrolling or following the link (with Shift, Ctrl, Alt or Meta the key is left to the browser), and term checkboxes, range fields and handles, section toggles and Apply/Reset show a visible focus ring.
 - More/Less keeps keyboard focus: activating "See more" or "See less" moves focus to the link Filter Everything shows in its place (instead of dropping it on the page), and after expanding the next Tab goes to the first revealed term.
 - A focused control is never left under the sticky Apply/Reset box: its scroll container (or the window) scrolls just enough to show it with a 12px gap, smoothly unless the visitor prefers reduced motion.
+- A Space key-up lost when focus moves no longer swallows a later click without a pointer (screen reader activation).
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters.
 - Requires WordPress 6.5 and declares the Filter Everything dependency.
 
