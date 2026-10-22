@@ -599,6 +599,9 @@
       else set.add(slug);
     };
 
+    // Term whose Space key-down already toggled it (see the key handlers).
+    let keyClickInput = null;
+
     // Stop propagation before Filter Everything's delegated listeners run.
     root.addEventListener('click', event => {
       const li = event.target.closest?.(ITEM_SELECTOR);
@@ -607,22 +610,48 @@
       if (!input || !selectionFor(input)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      // Keyboard click following a Space already toggled on key-down.
+      if (input === keyClickInput && event.detail === 0) {
+        keyClickInput = null;
+        window.setTimeout(syncInputs, 0);
+        return;
+      }
       toggle(input);
       // Native checkbox default action may undo `.checked` after preventDefault.
       window.setTimeout(syncInputs, 0);
     }, true);
 
-    // Space activates a focused checkbox through a native click, which the
-    // click handler above toggles exactly once. Browsers do not click a
-    // checkbox on Enter, so Enter is handled here (and cannot submit a form).
+    // One tab stop per term: the checkbox. The term link inside its label
+    // still names the checkbox and still toggles it on click.
+    for (const input of inputs) {
+      input.closest(ITEM_SELECTOR).querySelectorAll('a[href]').forEach(link => { link.tabIndex = -1; });
+    }
+
+    // Space and Enter on a focused term (its checkbox, or its link after a
+    // mouse click focused it) toggle it here exactly once. Their defaults
+    // are prevented: Space would scroll the page from a link, Enter would
+    // follow the link or submit a form. A browser that still clicks the
+    // checkbox on the Space key-up gets that click swallowed above.
+    const keyTerm = el => {
+      const li = el.closest?.(ITEM_SELECTOR);
+      const input = li && root.contains(li) ? li.querySelector(INPUT_SELECTOR) : null;
+      return input && selectionFor(input) ? input : null;
+    };
     root.addEventListener('keydown', event => {
-      const el = event.target;
-      if (event.key !== 'Enter' || !el.matches?.(INPUT_SELECTOR)) return;
-      if (!selectionFor(el)) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const input = keyTerm(event.target);
+      if (!input) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      toggle(el);
+      if (event.repeat) return;
+      toggle(input);
       syncInputs();
+      if (event.key === ' ') keyClickInput = input;
+    }, true);
+    root.addEventListener('keyup', event => {
+      if (event.key !== ' ' || !keyClickInput) return;
+      event.preventDefault();
+      window.setTimeout(() => { keyClickInput = null; }, 0);
     }, true);
 
     const controls = createElement('div', 'fe-batch-controls');

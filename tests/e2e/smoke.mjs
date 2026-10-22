@@ -244,14 +244,16 @@ async function createPage(session) {
     return 'mouse';
   }
 
-  /** Presses Space or Enter on the focused element with real key input. */
+  /** Presses Space, Enter or Tab on the focused element with real key input. */
   async function press(key) {
     const keys = {
       Space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' },
       Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' },
+      Tab: { key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 },
     };
     const { text, ...definition } = keys[key];
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', ...definition, text });
+    // Keys without text (Tab) are raw key downs, as with a real keyboard.
+    await send('Input.dispatchKeyEvent', text ? { type: 'keyDown', ...definition, text } : { type: 'rawKeyDown', ...definition });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', ...definition });
   }
 
@@ -349,7 +351,8 @@ async function keyboardTogglesOnce(page) {
   await markItems(page, 1);
   const focused = await page.evaluate(`(() => {
     const input = document.querySelector('${itemSelector(0)} input[type="checkbox"]');
-    input.focus();
+    input.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
     return document.activeElement === input;
   })()`);
   check(focused, 'Checkbox cannot be focused');
@@ -357,9 +360,45 @@ async function keyboardTogglesOnce(page) {
   for (const [key, expected] of [['Space', true], ['Space', false], ['Enter', true], ['Enter', false]]) {
     await page.press(key);
     await expectChecked(page, 0, expected, key);
+    check(await page.evaluate('window.scrollY') === 0, `${key} scrolled the page`);
   }
   check(page.documentRequests.length === requests, 'A key press navigated');
-  return 'Space, Space, Enter, Enter toggled once each';
+  return 'Space, Space, Enter, Enter toggled once each, no scroll';
+}
+
+async function tabMovesBetweenCheckboxes(page) {
+  await page.goto(ARCHIVE_PATH);
+  // A displayed term followed by another displayed term of the same list.
+  const found = await page.evaluate(`(() => {
+    const INPUT = 'input[type="checkbox"][data-wpc-e-name][data-wpc-slug]';
+    const shown = li => !!li && li.matches(${JSON.stringify(ITEM_SELECTOR)}) && !!li.querySelector(INPUT) && li.getClientRects().length > 0;
+    const from = [...document.querySelectorAll('.fe-batch-ready li')].find(li => shown(li) && shown(li.nextElementSibling));
+    if (!from) return false;
+    from.dataset.smokeTab = 'from';
+    from.nextElementSibling.dataset.smokeTab = 'to';
+    const input = from.querySelector(INPUT);
+    input.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+    return document.activeElement === input;
+  })()`);
+  check(found, 'No two consecutive displayed terms, or the checkbox cannot be focused');
+  await page.press('Tab');
+  const landed = await page.evaluate(`(() => {
+    const el = document.activeElement;
+    return { onNext: el === document.querySelector('li[data-smoke-tab="to"] input[type="checkbox"]'), tag: el.tagName, className: String(el.className) };
+  })()`);
+  check(landed.onNext, `Tab landed on ${landed.tag}.${landed.className}, not the next term's checkbox`);
+  const requests = page.documentRequests.length;
+  await page.press('Space');
+  await sleep(150);
+  const after = await page.evaluate(`(() => {
+    const li = document.querySelector('li[data-smoke-tab="to"]');
+    return { checked: li.querySelector('input').checked, selected: li.classList.contains('wpc-term-selected'), scrollY: window.scrollY };
+  })()`);
+  check(after.checked && after.selected, `Space did not toggle the next term once: ${JSON.stringify(after)}`);
+  check(after.scrollY === 0, `Space scrolled the page to ${after.scrollY}`);
+  check(page.documentRequests.length === requests, 'Space navigated');
+  return 'Tab reached the next term checkbox; Space toggled it once without scrolling';
 }
 
 async function applyNavigatesOnce(page) {
@@ -533,6 +572,7 @@ async function pageWithoutWidgetIsUntouched(page) {
 const SCENARIOS = [
   ['clicks toggle locally without navigating', clicksToggleLocally],
   ['Space/Enter toggle exactly once', keyboardTogglesOnce],
+  ['Tab moves between term checkboxes', tabMovesBetweenCheckboxes],
   ['Apply sets busy state and navigates once', applyNavigatesOnce],
   ['Back (bfcache) restores the rendered state', backRestoresRenderedState],
   ['replaced ancestor wrapper is initialized once', replacedWrapperInitializedOnce],

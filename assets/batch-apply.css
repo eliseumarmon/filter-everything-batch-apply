@@ -55,6 +55,19 @@
 /* Pending navigation: both buttons are disabled until the page changes. */
 .fe-batch-ready .fe-batch-controls button:disabled { cursor: progress; opacity: .7; }
 .fe-batch-ready input[type="checkbox"] { accent-color: var(--fe-batch-ink); }
+/* Keyboard focus: one clear ring in the ink color, offset from the control
+   so it reads on the light grey panel. Pointer focus shows no ring. */
+.fe-batch-ready li.wpc-checkbox-item input[type="checkbox"]:focus-visible,
+.fe-batch-ready input.fe-batch-price-number:focus-visible,
+.fe-batch-ready .fe-batch-controls button:focus-visible,
+.fe-batch-ready .wpc-filter-title button:focus-visible,
+.fe-batch-ready a.wpc-toggle-a:focus-visible { outline: 2px solid var(--fe-batch-ink) !important; outline-offset: 2px !important; }
+/* The Labels view hides its checkbox: ring the visible label instead. */
+.fe-batch-ready li.wpc-label-item:has(input[type="checkbox"]:focus-visible) label { outline: 2px solid var(--fe-batch-ink) !important; outline-offset: 2px !important; }
+/* Range inputs span the whole track: ring only the focused handle. */
+.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible { outline: none !important; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fe-batch-ink); }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fe-batch-ink); }
 .fe-batch-ready li.wpc-term-item a { color: var(--fe-batch-ink) !important; }
 
 /* Applied terms are already shown in the catalog's active-filter chips.
