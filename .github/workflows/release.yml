@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+
+      - name: Check the tag matches the plugin version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          header_version="$(sed -n 's/^ \* Version: *\([^ ]*\).*$/\1/p' filter-everything-batch-apply.php | tr -d '\r')"
+          constant_version="$(sed -n "s/^define('FE_BATCH_APPLY_VERSION', '\([^']*\)');.*$/\1/p" filter-everything-batch-apply.php | tr -d '\r')"
+          echo "Tag: $tag_version, header: $header_version, constant: $constant_version"
+          if [ "$tag_version" != "$header_version" ] || [ "$tag_version" != "$constant_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the plugin Version header ($header_version) and FE_BATCH_APPLY_VERSION ($constant_version)."
+            exit 1
+          fi
+
+      - name: Build the plugin ZIP
+        run: git archive --format=zip --prefix=filter-everything-batch-apply/ -o filter-everything-batch-apply.zip HEAD
+
+      - name: Extract release notes from the README changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            /^##/ { if (found) exit }
+            $0 ~ "^### " v "( |$)" { found = 1; next }
+            found { print }
+          ' README.md > release-notes.md
+          if grep -q '[^[:space:]]' release-notes.md; then
+            echo "NOTES_ARGS=--notes-file release-notes.md" >> "$GITHUB_ENV"
+          else
+            echo "NOTES_ARGS=--generate-notes" >> "$GITHUB_ENV"
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" filter-everything-batch-apply.zip \
+            --title "$GITHUB_REF_NAME" \
+            --verify-tag \
+            $NOTES_ARGS
