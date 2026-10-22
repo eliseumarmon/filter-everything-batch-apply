@@ -79,6 +79,23 @@ Pure URL and config helpers in `assets/batch-apply.js` are covered by Node's bui
 node --test "tests/*.test.js"
 ```
 
+Browser smoke tests in `tests/e2e/smoke.mjs` drive a local Chrome or Edge over the DevTools protocol (Node 24, no dependencies) against a running site with Filter Everything and this add-on active. They check click and keyboard toggles, the Apply busy state and query, re-initialization after a replaced wrapper, the DOM fallback without configuration, and a page without a widget. They are not part of the unit test run:
+
+```sh
+node tests/e2e/smoke.mjs
+BASE_URL=https://shop.test ARCHIVE_PATH=/product-category/shirts/ node tests/e2e/smoke.mjs
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | Site root. |
+| `ARCHIVE_PATH` | `/shop/` | Page that renders a filter widget with at least two checkbox or label fields. |
+| `NO_WIDGET_PATH` | `/?s=camiseta&post_type=product` | Page without a filter widget. |
+| `CHROME_PATH` | Common Chrome/Edge install paths | Browser executable. |
+| `CDP_URL` | (unset) | Attach to a browser started with `--remote-debugging-port` instead of launching one. |
+
+The script exits with 0 when every scenario passes, 1 on a failure, and prints `SKIPPED` with exit 0 when no browser is found. In Git Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` so path variables are not rewritten.
+
 ## Changelog
 
 ### 0.2.0
