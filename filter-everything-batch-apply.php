@@ -144,6 +144,8 @@ function fe_batch_get_strings() {
     return array(
         'apply' => __('Apply filters', 'fe-batch-apply'),
         'reset' => __('Reset', 'fe-batch-apply'),
+        /* translators: Apply button label while the filtered page is loading. */
+        'busy' => __('Applying…', 'fe-batch-apply'),
         /* translators: Lower bound label of a range editor. Prices append the currency symbol, e.g. "From (€)". */
         'from' => __('From', 'fe-batch-apply'),
         /* translators: Upper bound label of a range editor. Prices append the currency symbol, e.g. "To (€)". */

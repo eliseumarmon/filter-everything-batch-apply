@@ -21,6 +21,11 @@ msgstr ""
 msgid "Reset"
 msgstr ""
 
+#. translators: Apply button label while the filtered page is loading.
+#: filter-everything-batch-apply.php
+msgid "Applying…"
+msgstr ""
+
 #. translators: Lower bound label of a range editor. Prices append the currency symbol, e.g. "From (€)".
 #: filter-everything-batch-apply.php
 msgid "From"

@@ -214,3 +214,28 @@ test('rangeLabels appends the currency symbol to price labels only', () => {
     from: 'Desde', to: 'Hasta', min: 'Precio mínimo', max: 'Precio máximo',
   });
 });
+
+test('rangeAction omits an untouched full range when no range is applied', () => {
+  const full = { lowerBound: 0, upperBound: 100, min: 0, max: 100, changed: true, reset: false };
+  assert.equal(helpers.rangeAction(full, false), 'clear');
+  // An applied range moved back to the full bounds is still written.
+  assert.equal(helpers.rangeAction(full, true), 'set');
+  assert.equal(helpers.rangeAction({ ...full, min: 1 }, false), 'set');
+});
+
+test('buildApplyUrl adds no range params for a full untouched range', () => {
+  const state = { lowerBound: 0, upperBound: 100, min: 0, max: 100, changed: true, reset: false };
+  const actual = helpers.buildApplyUrl(`${BASE}?orderby=price`, {
+    multi: [{ param: 'filtro_color', values: ['rojo'] }],
+    ranges: [{ params: ['min_filtro_precio', 'max_filtro_precio'], action: helpers.rangeAction(state, false), min: 0, max: 100 }],
+    separator: ';',
+  });
+  assert.equal(actual, `${BASE}?orderby=price&filtro_color=rojo`);
+});
+
+test('isRangeApplied detects either bound in the URL', () => {
+  const params = ['min_filtro_precio', 'max_filtro_precio'];
+  assert.equal(helpers.isRangeApplied(`${BASE}?max_filtro_precio=40`, params), true);
+  assert.equal(helpers.isRangeApplied(`${BASE}?min_filtro_precio=4`, params), true);
+  assert.equal(helpers.isRangeApplied(`${BASE}?orderby=price`, params), false);
+});

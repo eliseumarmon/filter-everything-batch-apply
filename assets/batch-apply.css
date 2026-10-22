@@ -1,4 +1,4 @@
-/* Only enqueued on WooCommerce product archives. Scoped to addon widgets. */
+/* Only enqueued where Filter Everything renders supported fields. Scoped to addon widgets. */
 .fe-batch-ready { --fe-batch-ink: #30343a; --fe-batch-border: #d7dade; }
 .fe-batch-ready .fe-batch-native-action,
 .fe-batch-ready .wpc-filters-submit-button,
@@ -52,6 +52,8 @@
 .fe-batch-ready .fe-batch-apply:hover { background: #171a1e !important; }
 .fe-batch-ready .fe-batch-reset { color: var(--fe-batch-ink) !important; background: #fff !important; border: 1px solid #bfc3c8 !important; }
 .fe-batch-ready .fe-batch-reset:hover { background: #f4f4f4 !important; }
+/* Pending navigation: both buttons are disabled until the page changes. */
+.fe-batch-ready .fe-batch-controls button:disabled { cursor: progress; opacity: .7; }
 .fe-batch-ready input[type="checkbox"] { accent-color: var(--fe-batch-ink); }
 .fe-batch-ready li.wpc-term-item a { color: var(--fe-batch-ink) !important; }
 

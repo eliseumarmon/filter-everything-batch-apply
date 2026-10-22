@@ -102,13 +102,21 @@
     );
   }
 
+  function isRangeApplied(href, params) {
+    const url = new URL(href);
+    return params.some(param => url.searchParams.has(param));
+  }
+
   /**
    * What Apply does with one range: "keep" whatever the URL has, "clear"
-   * its params, or "set" the chosen bounds.
+   * its params, or "set" the chosen bounds. A range left at its full
+   * bounds adds nothing unless the URL already restricts it.
    */
-  function rangeAction(state) {
+  function rangeAction(state, appliedInUrl) {
     if (!state.changed) return 'keep';
     if (state.reset) return 'clear';
+    const isFullRange = state.min <= state.lowerBound && state.max >= state.upperBound;
+    if (isFullRange && !appliedInUrl) return 'clear';
     return 'set';
   }
 
@@ -167,7 +175,7 @@
 
   const helpers = {
     parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
-    computeBounds, clampRange, initialRange, rangeAction, rangeLabels, stripPagination,
+    computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl,
   };
 
@@ -191,6 +199,7 @@
   const STRINGS = Object.assign({
     apply: 'Apply filters',
     reset: 'Reset',
+    busy: 'Applying…',
     from: 'From',
     to: 'To',
     minPrice: 'Minimum price',
@@ -210,6 +219,8 @@
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
   const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
   const initialized = new WeakSet();
+  // Restores Apply/Reset when the page comes back from the back/forward cache.
+  const busyResetters = [];
 
   function multiFieldFor(input) {
     const eName = input.dataset.wpcEName;
@@ -475,10 +486,12 @@
       window.setTimeout(syncInputs, 0);
     }, true);
 
+    // Space activates a focused checkbox through a native click, which the
+    // click handler above toggles exactly once. Browsers do not click a
+    // checkbox on Enter, so Enter is handled here (and cannot submit a form).
     root.addEventListener('keydown', event => {
       const el = event.target;
-      if (!el.matches?.(INPUT_SELECTOR)) return;
-      if (event.key !== ' ' && event.key !== 'Enter') return;
+      if (event.key !== 'Enter' || !el.matches?.(INPUT_SELECTOR)) return;
       if (!selectionFor(el)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -495,38 +508,88 @@
     hideNativeButtons(root);
     setInitialPresentation(root);
 
+    // While a navigation is pending both buttons are disabled, so a second
+    // click cannot queue another request.
+    let busy = false;
+    const setBusy = (value, clicked) => {
+      busy = value;
+      for (const button of [applyButton, resetButton]) {
+        button.disabled = value;
+        if (value && button === clicked) button.setAttribute('aria-busy', 'true');
+        else button.removeAttribute('aria-busy');
+      }
+      applyButton.textContent = value && clicked === applyButton ? STRINGS.busy : STRINGS.apply;
+    };
+    const navigate = (href, clicked) => {
+      setBusy(true, clicked);
+      window.location.assign(href);
+    };
+    busyResetters.push(() => setBusy(false));
+
     // Reset clears BOTH locally pending and already-applied criteria.
     // On an already filtered URL it navigates once, removing the visible chips.
     // If nothing is applied yet, it simply clears the pending selections.
     resetButton.addEventListener('click', () => {
+      if (busy) return;
       for (const set of selections.values()) set.clear();
       ranges.forEach(range => range.resetValue());
       syncInputs();
       const cleanUrl = buildResetUrl(window.location.href, managedParams);
       if (cleanUrl !== window.location.href) {
-        window.location.assign(cleanUrl);
+        navigate(cleanUrl, resetButton);
       } else {
         applyButton.focus();
       }
     });
 
     applyButton.addEventListener('click', () => {
+      if (busy) return;
       const href = buildApplyUrl(window.location.href, {
         separator: SEPARATOR,
         multi: multiFields.map(field => ({ param: field.params[0], values: selections.get(field.params[0]) })),
         ranges: ranges.map(range => {
           if (range.changed && !range.reset) range.commit();
-          return { params: range.params, action: rangeAction(range), min: range.min, max: range.max };
+          const action = rangeAction(range, isRangeApplied(window.location.href, range.params));
+          return { params: range.params, action, min: range.min, max: range.max };
         }),
       });
       if (href !== window.location.href) {
-        window.location.assign(href);
+        navigate(href, applyButton);
       }
     });
   }
 
+  let pending = false;
+  const observer = new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    window.setTimeout(() => {
+      pending = false;
+      initializeAll();
+    }, 50);
+  });
+
+  /**
+   * Filter Everything may replace a whole widget container after its own
+   * AJAX requests. Watch only the containers' parents for that; the whole
+   * document is watched only until a filter widget shows up.
+   */
+  function watchFilterContainers() {
+    observer.disconnect();
+    const parents = new Set();
+    document.querySelectorAll(`${ROOT_SELECTOR}, .wpc-filters-widget-wrapper`).forEach(container => {
+      if (container.parentElement) parents.add(container.parentElement);
+    });
+    if (!parents.size) {
+      observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+      return;
+    }
+    parents.forEach(parent => observer.observe(parent, { childList: true }));
+  }
+
   function initializeAll() {
     for (const root of getRootCandidates()) init(root);
+    watchFilterContainers();
   }
 
   if (document.readyState === 'loading') {
@@ -538,17 +601,7 @@
   // A back/forward cache restore is a navigation without a new page load.
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
+    busyResetters.forEach(reset => reset());
     for (const root of getRootCandidates()) setInitialPresentation(root);
   });
-
-  let pending = false;
-  const observer = new MutationObserver(() => {
-    if (pending) return;
-    pending = true;
-    window.setTimeout(() => {
-      pending = false;
-      initializeAll();
-    }, 50);
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();

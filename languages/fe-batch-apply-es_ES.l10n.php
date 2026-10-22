@@ -16,6 +16,7 @@ return array(
     'messages' => array(
         'Apply filters' => 'Aplicar filtros',
         'Reset' => 'Restablecer',
+        'Applying…' => 'Aplicando…',
         'From' => 'Desde',
         'To' => 'Hasta',
         'Minimum price' => 'Precio mínimo',
