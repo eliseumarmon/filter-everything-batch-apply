@@ -1,0 +1,60 @@
+/* Only enqueued on WooCommerce product archives. Scoped to addon widgets. */
+.fe-batch-ready { --fe-batch-ink: #30343a; --fe-batch-border: #d7dade; }
+.fe-batch-ready .fe-batch-native-action,
+.fe-batch-ready .wpc-filters-submit-button,
+.fe-batch-ready .wpc-filters-reset-button,
+.fe-batch-ready .wpc-sticky-buttons,
+.fe-batch-ready .wpc-edit-filter-set { display: none !important; }
+/* Hides all original Filter Everything price UI, including slider wrappers.
+   The markup remains intact, and the Folding heading remains visible. */
+.fe-batch-ready .fe-batch-has-price .fe-batch-native-price-ui { display: none !important; }
+.fe-batch-ready .fe-batch-price-editor,
+.fe-batch-ready .fe-batch-price-editor * { box-sizing: border-box; }
+.fe-batch-ready .fe-batch-price-editor { width: 100%; max-width: 100%; margin: 10px 0 22px; padding: 0 2px; }
+.fe-batch-ready .fe-batch-price-numbers { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; width: 100%; }
+.fe-batch-ready .fe-batch-price-numbers label { display: block; min-width: 0; width: 100%; margin: 0; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--fe-batch-ink); }
+.fe-batch-ready .fe-batch-price-numbers label span { display: block; margin-bottom: 5px; white-space: nowrap; }
+.fe-batch-ready input.fe-batch-price-number { display: block; width: 100% !important; max-width: 100% !important; min-width: 0; height: 38px; padding: 7px 9px !important; margin: 0 !important; border: 1px solid var(--fe-batch-border) !important; border-radius: 4px; background: white; color: var(--fe-batch-ink); font: inherit; text-align: left; }
+.fe-batch-ready .fe-batch-dual-range { position: relative; height: 40px; margin: 18px 8px 0; }
+.fe-batch-ready .fe-batch-range-track,
+.fe-batch-ready .fe-batch-range-selection { height: 4px; border-radius: 4px; position: absolute; top: 18px; left: 0; }
+.fe-batch-ready .fe-batch-range-track { right: 0; background: #d9dcdf; }
+.fe-batch-ready .fe-batch-range-selection { background: var(--fe-batch-ink); }
+.fe-batch-ready .fe-batch-dual-range input[type="range"] { position: absolute; top: 10px; left: 0; width: 100%; height: 20px; padding: 0 !important; margin: 0 !important; background: transparent; border: 0; appearance: none; -webkit-appearance: none; pointer-events: none; }
+.fe-batch-ready .fe-batch-dual-range .fe-batch-range-min { z-index: 2; }
+.fe-batch-ready .fe-batch-dual-range .fe-batch-range-max { z-index: 3; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; background: white; border: 2px solid var(--fe-batch-ink); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]::-moz-range-thumb { background: white; border: 2px solid var(--fe-batch-ink); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]::-moz-range-track { background: transparent; border: 0; }
+/* Keep the action card inset from the off-canvas sides and bottom, avoiding
+   clipping caused by BeTheme scroll containers and sticky positioning. */
+.fe-batch-ready .fe-batch-controls {
+  box-sizing: border-box;
+  position: sticky;
+  bottom: 10px;
+  z-index: 9;
+  display: grid;
+  gap: 9px;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  margin: 16px 12px 16px;
+  padding: 12px 10px;
+  background: #fff;
+  border: 1px solid #e7e7e7;
+  border-radius: 6px;
+  overflow: visible;
+}
+.fe-batch-ready .fe-batch-controls > button { min-width: 0; max-width: 100%; }
+
+.fe-batch-ready .fe-batch-controls button { box-sizing: border-box; display: block; width: 100%; padding: 12px 14px; margin: 0; font: inherit; font-weight: 600; line-height: 1.4; border-radius: 5px; cursor: pointer; }
+.fe-batch-ready .fe-batch-apply { color: #fff !important; background: var(--fe-batch-ink) !important; border: 1px solid var(--fe-batch-ink) !important; }
+.fe-batch-ready .fe-batch-apply:hover { background: #171a1e !important; }
+.fe-batch-ready .fe-batch-reset { color: var(--fe-batch-ink) !important; background: #fff !important; border: 1px solid #bfc3c8 !important; }
+.fe-batch-ready .fe-batch-reset:hover { background: #f4f4f4 !important; }
+.fe-batch-ready input[type="checkbox"] { accent-color: var(--fe-batch-ink); }
+.fe-batch-ready li.wpc-term-item a { color: var(--fe-batch-ink) !important; }
+
+/* Applied terms are already shown in the catalog's active-filter chips.
+   Do not repeat them in the filter heading (e.g. "— Amarillo", "— Deportes"). */
+.fe-batch-ready .wpc-filter-selected-values { display: none !important; }
