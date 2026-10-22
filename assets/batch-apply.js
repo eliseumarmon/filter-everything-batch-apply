@@ -324,6 +324,7 @@
   const INPUT_SELECTOR = 'input[type="checkbox"][data-wpc-e-name][data-wpc-slug]';
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
   const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
+  const MORE_LESS_SELECTOR = 'a.wpc-toggle-a';
   const initialized = new WeakSet();
   // One controller per initialized widget. On a back/forward cache restore
   // its local state returns to the server-rendered snapshot and its busy
@@ -551,6 +552,54 @@
     });
   }
 
+  const isShown = element => element.getClientRects().length > 0;
+
+  /**
+   * Filter Everything prints two More/Less links per section ("See more",
+   * "See less") and hides the activated one, so its focus falls back to the
+   * page and an off-canvas focus trap then sends the next Tab to the panel's
+   * first control. Move focus to the link now shown. After expanding, that
+   * link sits below the whole list, so it is focused without scrolling and
+   * the next Tab goes to the first revealed term instead of past the list.
+   */
+  function keepMoreLessFocus(root) {
+    let revealTab = null;
+
+    root.addEventListener('click', event => {
+      const link = event.target.closest?.(MORE_LESS_SELECTOR);
+      if (!link || !root.contains(link) || document.activeElement !== link) return;
+      const section = link.closest('.wpc-filters-section');
+      if (!section) return;
+      const shownItems = () => [...section.querySelectorAll(ITEM_SELECTOR)].filter(isShown);
+      const shownBefore = new Set(shownItems());
+      // Filter Everything's handler is delegated to the document: it runs
+      // after this one, in the same dispatch.
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (isShown(link) || (active && active !== link && active !== document.body)) return;
+        const shown = [...section.querySelectorAll(MORE_LESS_SELECTOR)].find(other => other !== link && isShown(other));
+        if (!shown) return;
+        const revealed = shownItems().find(li => !shownBefore.has(li));
+        shown.focus({ preventScroll: Boolean(revealed) });
+        const firstTerm = revealed && revealed.querySelector('input, a[href]:not([tabindex="-1"])');
+        revealTab = firstTerm && document.activeElement === shown ? { from: shown, to: firstTerm } : null;
+      }, 0);
+    });
+
+    root.addEventListener('keydown', event => {
+      if (!revealTab || event.key !== 'Tab') return;
+      const { from, to } = revealTab;
+      revealTab = null;
+      if (event.target !== from || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      to.focus();
+      if (document.activeElement === to) event.preventDefault();
+    }, true);
+
+    root.addEventListener('focusout', event => {
+      if (revealTab && event.target === revealTab.from) revealTab = null;
+    });
+  }
+
   function init(root) {
     if (initialized.has(root)) return;
     initialized.add(root);
@@ -667,6 +716,7 @@
     root.classList.add('fe-batch-ready');
     hideNativeButtons(root);
     setInitialPresentation(root);
+    keepMoreLessFocus(root);
 
     // While a navigation is pending both buttons are disabled, so a second
     // click cannot queue another request.
