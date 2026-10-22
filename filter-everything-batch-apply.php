@@ -11,6 +11,7 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: fe-batch-apply
  * Domain Path: /languages
+ * Update URI: https://github.com/eliseumarmon/filter-everything-batch-apply
  */
 
 if (!defined('ABSPATH')) {
@@ -18,6 +19,9 @@ if (!defined('ABSPATH')) {
 }
 
 define('FE_BATCH_APPLY_VERSION', '0.2.0');
+define('FE_BATCH_APPLY_FILE', __FILE__);
+
+require_once __DIR__ . '/includes/updater.php';
 
 add_action('init', function () {
     load_plugin_textdomain('fe-batch-apply', false, dirname(plugin_basename(__FILE__)) . '/languages');
