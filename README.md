@@ -4,7 +4,7 @@ Stop waiting for an AJAX request on every filter click. This add-on for [Filter 
 
 On a shop where each filter request takes several seconds, choosing four options goes from four waits to one. Filter Everything still runs the query, with its own URL parameters. Nothing to configure, and WooCommerce, the theme and Filter Everything are never modified.
 
-> **Status:** 0.2.0 is unreleased. 0.1.x runs in production on one shop.
+> **Status:** 0.2.0 is the first public release. Earlier 0.1.x versions were built for a single shop.
 
 ## Quick start
 
@@ -134,7 +134,7 @@ The [release workflow](.github/workflows/release.yml) checks that the tag matche
 
 ## Changelog
 
-### 0.2.0 (unreleased)
+### 0.2.0 (2026-10-22)
 
 - **Zero configuration:** fields, URL parameters and separator come from Filter Everything for each page and filter set; a DOM fallback covers pages without configuration.
 - Works on any page where Filter Everything renders supported fields (shop, categories, tags, brands); inactive elsewhere and with path permalinks.
