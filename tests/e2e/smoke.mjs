@@ -407,6 +407,54 @@ async function tabMovesBetweenCheckboxes(page) {
   return 'Tab reached the next term checkbox; Space toggled it once without scrolling';
 }
 
+/**
+ * Tab through the terms from the first displayed one: the focused control
+ * must never sit under the sticky Apply/Reset box. Reduced motion is
+ * emulated so the add-on scrolls instantly.
+ */
+async function focusNeverUnderControls(page) {
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  try {
+    await page.goto(ARCHIVE_PATH);
+    const started = await page.evaluate(`(() => {
+      const root = document.querySelector('.fe-batch-ready');
+      const input = [...root.querySelectorAll(${JSON.stringify(ITEM_SELECTOR)})]
+        .map(li => li.querySelector('input[type="checkbox"]'))
+        .find(el => el && el.closest('li').getClientRects().length > 0);
+      if (!input) return false;
+      input.focus();
+      return document.activeElement === input;
+    })()`);
+    check(started, 'No displayed term checkbox to start from');
+    // Rect of the focused control (the visible label in the Labels view)
+    // and of its widget's controls box; null once focus leaves the terms.
+    const PROBE = `(() => {
+      const el = document.activeElement;
+      const root = el && el.closest('.fe-batch-ready');
+      if (!root || el.closest('.fe-batch-controls')) return null;
+      const labelItem = el.closest('li.wpc-label-item');
+      const r = ((labelItem && labelItem.querySelector('label')) || el).getBoundingClientRect();
+      const b = root.querySelector('.fe-batch-controls').getBoundingClientRect();
+      const overlap = r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right;
+      return { overlap, name: el.tagName + (el.dataset.wpcSlug ? ':' + el.dataset.wpcSlug : ''), top: Math.round(r.top), bottom: Math.round(r.bottom), boxTop: Math.round(b.top) };
+    })()`;
+    let steps = 0;
+    let nearBox = 0;
+    for (; steps < 40; steps++) {
+      const probe = await page.evaluate(PROBE);
+      if (!probe) break;
+      check(!probe.overlap, `Focused ${probe.name} (${probe.top}..${probe.bottom}) is under the controls box (top ${probe.boxTop}) after ${steps} Tab(s)`);
+      if (probe.boxTop - probe.bottom < 40) nearBox++;
+      await page.press('Tab');
+      await sleep(150);
+    }
+    check(steps > 1, 'Tab left the terms immediately');
+    return `${steps} focus stops checked, none under the box (${nearBox} right above it)`;
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { features: [] });
+  }
+}
+
 async function applyNavigatesOnce(page) {
   const start = `${ARCHIVE_PATH}${ARCHIVE_PATH.includes('?') ? '&' : '?'}orderby=price&smoke=keep&paged=2`;
   await page.goto(start);
@@ -585,6 +633,7 @@ const SCENARIOS = [
   ['clicks toggle locally without navigating', clicksToggleLocally],
   ['Space/Enter toggle exactly once', keyboardTogglesOnce],
   ['Tab moves between term checkboxes', tabMovesBetweenCheckboxes],
+  ['focused controls are never under the Apply/Reset box', focusNeverUnderControls],
   ['Apply sets busy state and navigates once', applyNavigatesOnce],
   ['Back restores the rendered state', page => backRestoresRenderedState(page, 'any')],
   ['replaced ancestor wrapper is initialized once', replacedWrapperInitializedOnce],

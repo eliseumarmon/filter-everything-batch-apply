@@ -279,11 +279,25 @@
     });
   }
 
+  /**
+   * Vertical scroll (px, positive = down) that moves a focused control clear
+   * of a sticky box, plus `margin`. Both are viewport rects ({ top, bottom,
+   * left, right }). 0 when they do not overlap, so a control off screen (for
+   * example focused without scrolling) is left alone.
+   */
+  function revealDelta(target, box, margin = 0) {
+    if (box.bottom <= box.top || box.right <= box.left) return 0;
+    if (target.bottom <= box.top || target.top >= box.bottom) return 0;
+    if (target.right <= box.left || target.left >= box.right) return 0;
+    const boxBelow = box.top + box.bottom > target.top + target.bottom;
+    return boxBelow ? target.bottom - box.top + margin : target.top - box.bottom - margin;
+  }
+
   const helpers = {
     parseValues, readSelection, rootSetId, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS, mutationsAddWidget,
-    snapshotState, restoreState,
+    snapshotState, restoreState, revealDelta,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -325,6 +339,8 @@
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
   const RANGE_MAX_SELECTOR = 'input.wpc-filters-range-max';
   const MORE_LESS_SELECTOR = 'a.wpc-toggle-a';
+  // Space kept between a focused control and the sticky Apply/Reset box.
+  const REVEAL_MARGIN = 12;
   const initialized = new WeakSet();
   // One controller per initialized widget. On a back/forward cache restore
   // its local state returns to the server-rendered snapshot and its busy
@@ -600,6 +616,38 @@
     });
   }
 
+  /** Nearest ancestor that scrolls vertically, or null for the window. */
+  function scrollParent(element) {
+    for (let node = element.parentElement; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+      const { overflowY } = window.getComputedStyle(node);
+      if (/^(auto|scroll|overlay)$/.test(overflowY) && node.scrollHeight > node.clientHeight) return node;
+    }
+    return null;
+  }
+
+  /**
+   * The Apply/Reset box is sticky, so it covers whatever scrolls behind it.
+   * Once the browser has scrolled a newly focused control into view, scroll
+   * its nearest scrollable ancestor (or the window) just enough to clear
+   * the box. No smooth scrolling when the visitor prefers reduced motion.
+   */
+  function keepFocusClearOfControls(root, controls) {
+    root.addEventListener('focusin', event => {
+      const target = event.target;
+      if (!(target instanceof Element) || controls.contains(target)) return;
+      window.requestAnimationFrame(() => {
+        if (document.activeElement !== target) return;
+        // The Labels view hides its checkbox: measure the visible label.
+        const labelItem = target.closest('li.wpc-label-item');
+        const shown = (labelItem && labelItem.querySelector('label')) || target;
+        const delta = revealDelta(shown.getBoundingClientRect(), controls.getBoundingClientRect(), REVEAL_MARGIN);
+        if (!delta) return;
+        const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        (scrollParent(target) || window).scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
+      });
+    });
+  }
+
   function init(root) {
     if (initialized.has(root)) return;
     initialized.add(root);
@@ -717,6 +765,7 @@
     hideNativeButtons(root);
     setInitialPresentation(root);
     keepMoreLessFocus(root);
+    keepFocusClearOfControls(root, controls);
 
     // While a navigation is pending both buttons are disabled, so a second
     // click cannot queue another request.

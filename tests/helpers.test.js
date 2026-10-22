@@ -400,3 +400,27 @@ test('restoreState puts selections and ranges back in place', () => {
   assert.deepEqual(ranges[0].params, ['min_p', 'max_p']);
   assert.equal(ranges[0].upperBound, 96);
 });
+
+test('revealDelta scrolls a control out from under a sticky box at the bottom', () => {
+  const box = { top: 800, bottom: 880, left: 12, right: 308 };
+  // Control partly under the box: scroll down until it sits 12px above it.
+  assert.equal(helpers.revealDelta({ top: 790, bottom: 810, left: 20, right: 40 }, box, 12), 22);
+  // Fully under the box.
+  assert.equal(helpers.revealDelta({ top: 820, bottom: 840, left: 20, right: 40 }, box, 12), 52);
+});
+
+test('revealDelta scrolls up when the box sits above the control', () => {
+  const box = { top: 0, bottom: 80, left: 12, right: 308 };
+  assert.equal(helpers.revealDelta({ top: 70, bottom: 90, left: 20, right: 40 }, box, 12), -22);
+});
+
+test('revealDelta is 0 when the control and the box do not overlap', () => {
+  const box = { top: 800, bottom: 880, left: 12, right: 308 };
+  // Above, touching, below (off screen, as after a focus without scrolling), beside.
+  assert.equal(helpers.revealDelta({ top: 700, bottom: 720, left: 20, right: 40 }, box, 12), 0);
+  assert.equal(helpers.revealDelta({ top: 780, bottom: 800, left: 20, right: 40 }, box, 12), 0);
+  assert.equal(helpers.revealDelta({ top: 2600, bottom: 2620, left: 20, right: 40 }, box, 12), 0);
+  assert.equal(helpers.revealDelta({ top: 820, bottom: 840, left: 320, right: 340 }, box, 12), 0);
+  // An empty box (hidden) never overlaps.
+  assert.equal(helpers.revealDelta({ top: 820, bottom: 840, left: 20, right: 40 }, { top: 0, bottom: 0, left: 0, right: 0 }, 12), 0);
+});
