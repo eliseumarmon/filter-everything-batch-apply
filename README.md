@@ -90,6 +90,7 @@ node --test "tests/*.test.js"
 - Translatable English strings, Spanish translation, currency symbol from WooCommerce.
 - Busy state on Apply/Reset, no range parameters for untouched full ranges, single toggle on Space/Enter, narrower DOM observation.
 - Apply/Reset leave the busy state after 30 seconds when the navigation never commits (Stop, cancelled unload, 204 response or download).
+- Widgets added after load, or re-added when any wrapper around them is replaced, are initialized once; the observer only inspects added nodes.
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters.
 - Requires WordPress 6.5 and declares the Filter Everything dependency.
 

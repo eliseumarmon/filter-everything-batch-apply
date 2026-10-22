@@ -202,10 +202,24 @@
     };
   }
 
+  /**
+   * True when mutation records added an element that is, or contains, a
+   * filter widget. Only the added subtrees are queried, never the document.
+   */
+  function mutationsAddWidget(records, selector) {
+    for (const record of records) {
+      for (const node of record.addedNodes || []) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches(selector) || node.querySelector(selector)) return true;
+      }
+    }
+    return false;
+  }
+
   const helpers = {
     parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
     computeBounds, clampRange, initialRange, isRangeApplied, rangeAction, rangeLabels, stripPagination,
-    buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS,
+    buildApplyUrl, buildResetUrl, createNavigationGuard, NAVIGATION_TIMEOUT_MS, mutationsAddWidget,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -243,6 +257,9 @@
   const discoveredFields = new Map();
 
   const ROOT_SELECTOR = '.wpc-filters-main-wrap';
+  const FALLBACK_ROOT_SELECTOR = '.wpc-filters-widget-wrapper';
+  // Any Filter Everything widget container, supported or not.
+  const WIDGET_SELECTOR = `${ROOT_SELECTOR}, ${FALLBACK_ROOT_SELECTOR}`;
   const ITEM_SELECTOR = 'li.wpc-checkbox-item, li.wpc-label-item';
   const INPUT_SELECTOR = 'input[type="checkbox"][data-wpc-e-name][data-wpc-slug]';
   const RANGE_MIN_SELECTOR = 'input.wpc-filters-range-min';
@@ -299,7 +316,7 @@
   function getRootCandidates() {
     let roots = [...document.querySelectorAll(ROOT_SELECTOR)];
     if (!roots.length) {
-      roots = [...document.querySelectorAll('.wpc-filters-widget-wrapper')];
+      roots = [...document.querySelectorAll(FALLBACK_ROOT_SELECTOR)];
     }
     return roots.filter(root =>
       (supportedInputs(root).length || supportedRanges(root).length) &&
@@ -598,9 +615,19 @@
     });
   }
 
+  function initializeAll() {
+    for (const root of getRootCandidates()) init(root);
+  }
+
+  /**
+   * Filter Everything (or a theme) may replace the widget, or any wrapper
+   * around it, after an AJAX request. The whole body is observed, but each
+   * batch of mutations only inspects its added subtrees; a full scan runs,
+   * debounced, only when a widget was added. init() is idempotent.
+   */
   let pending = false;
-  const observer = new MutationObserver(() => {
-    if (pending) return;
+  const observer = new MutationObserver(records => {
+    if (pending || !mutationsAddWidget(records, WIDGET_SELECTOR)) return;
     pending = true;
     window.setTimeout(() => {
       pending = false;
@@ -608,33 +635,15 @@
     }, 50);
   });
 
-  /**
-   * Filter Everything may replace a whole widget container after its own
-   * AJAX requests. Watch only the containers' parents for that; the whole
-   * document is watched only until a filter widget shows up.
-   */
-  function watchFilterContainers() {
-    observer.disconnect();
-    const parents = new Set();
-    document.querySelectorAll(`${ROOT_SELECTOR}, .wpc-filters-widget-wrapper`).forEach(container => {
-      if (container.parentElement) parents.add(container.parentElement);
-    });
-    if (!parents.size) {
-      observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-      return;
-    }
-    parents.forEach(parent => observer.observe(parent, { childList: true }));
-  }
-
-  function initializeAll() {
-    for (const root of getRootCandidates()) init(root);
-    watchFilterContainers();
+  function start() {
+    initializeAll();
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeAll, { once: true });
+    document.addEventListener('DOMContentLoaded', start, { once: true });
   } else {
-    initializeAll();
+    start();
   }
 
   // The page is unloading or entering the back/forward cache: the pending

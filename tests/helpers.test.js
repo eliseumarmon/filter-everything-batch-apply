@@ -291,3 +291,26 @@ test('createNavigationGuard cancel and restart keep a single timer', () => {
   assert.equal(released, 0);
   guard.cancel();
 });
+
+/** Minimal element stub: `matches`/`querySelector` answer from class lists. */
+function fakeElement(classes, descendants = []) {
+  const has = (list, selector) => selector.split(',').some(part => list.includes(part.trim().replace(/^\./, '')));
+  return {
+    nodeType: 1,
+    matches: selector => has(classes, selector),
+    querySelector: selector => descendants.some(list => has(list, selector)) ? {} : null,
+  };
+}
+
+test('mutationsAddWidget finds added widgets or ancestors that contain one', () => {
+  const selector = '.wpc-filters-main-wrap, .wpc-filters-widget-wrapper';
+  const text = { nodeType: 3 };
+  const widget = fakeElement(['wpc-filters-main-wrap']);
+  const sidebar = fakeElement(['widget-area'], [['widget'], ['wpc-filters-widget-wrapper']]);
+  const product = fakeElement(['product'], [['price']]);
+  assert.equal(helpers.mutationsAddWidget([{ addedNodes: [text, widget] }], selector), true);
+  assert.equal(helpers.mutationsAddWidget([{ addedNodes: [] }, { addedNodes: [sidebar] }], selector), true);
+  assert.equal(helpers.mutationsAddWidget([{ addedNodes: [text, product] }], selector), false);
+  assert.equal(helpers.mutationsAddWidget([{ addedNodes: [], removedNodes: [widget] }], selector), false);
+  assert.equal(helpers.mutationsAddWidget([], selector), false);
+});
