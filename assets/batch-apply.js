@@ -112,6 +112,20 @@
     return 'set';
   }
 
+  /**
+   * Visible and aria labels of a range editor. Only price ranges get the
+   * currency symbol ("From (€)") and the price-specific aria labels.
+   */
+  function rangeLabels(strings, currencySymbol, isPrice) {
+    const suffix = isPrice && currencySymbol ? ` (${currencySymbol})` : '';
+    return {
+      from: strings.from + suffix,
+      to: strings.to + suffix,
+      min: isPrice ? strings.minPrice : strings.minValue,
+      max: isPrice ? strings.maxPrice : strings.maxValue,
+    };
+  }
+
   function stripPagination(url) {
     for (const param of PAGINATION_PARAMS) url.searchParams.delete(param);
     // WooCommerce may use pretty permalinks for pagination (/page/2/).
@@ -153,7 +167,7 @@
 
   const helpers = {
     parseValues, readSelection, buildFieldMap, deriveParamFromLink, safeNumber,
-    computeBounds, clampRange, initialRange, rangeAction, stripPagination,
+    computeBounds, clampRange, initialRange, rangeAction, rangeLabels, stripPagination,
     buildApplyUrl, buildResetUrl,
   };
 
@@ -173,17 +187,18 @@
     ? rawConfig.separator
     : DEFAULT_SEPARATOR;
   const RESET_PRESENTATION = !hasConfig || rawConfig.resetPresentation !== false;
+  // English fallbacks; PHP passes the translated strings.
   const STRINGS = Object.assign({
-    apply: 'Aplicar filtros',
-    reset: 'Restablecer',
-    from: 'Desde',
-    to: 'Hasta',
-    minPrice: 'Precio mínimo',
-    maxPrice: 'Precio máximo',
-    minValue: 'Mínimo',
-    maxValue: 'Máximo',
+    apply: 'Apply filters',
+    reset: 'Reset',
+    from: 'From',
+    to: 'To',
+    minPrice: 'Minimum price',
+    maxPrice: 'Maximum price',
+    minValue: 'Minimum',
+    maxValue: 'Maximum',
   }, hasConfig && rawConfig.strings && typeof rawConfig.strings === 'object' ? rawConfig.strings : {});
-  const CURRENCY = hasConfig && typeof rawConfig.currencySymbol === 'string' ? rawConfig.currencySymbol : '€';
+  const CURRENCY = hasConfig && typeof rawConfig.currencySymbol === 'string' ? rawConfig.currencySymbol : '';
 
   const configFields = buildFieldMap(rawConfig);
   // Without config, fields are discovered from the markup (see multiFieldFor).
@@ -271,24 +286,24 @@
       originalMin.dataset.min, originalMax.dataset.max, originalMin.value, originalMax.value
     );
     const chosen = initialRange(window.location.href, field.params, lowerBound, upperBound);
-    const isPrice = field.eName === '_price';
-    const suffix = isPrice && CURRENCY ? ` (${CURRENCY})` : '';
+    // WooCommerce stores the product price in the `_price` meta key.
+    const labels = rangeLabels(STRINGS, CURRENCY, field.eName === '_price');
 
     const editor = createElement('div', 'fe-batch-price-editor');
     const numbers = createElement('div', 'fe-batch-price-numbers');
     const fromInput = createElement('input', 'fe-batch-price-number', { type: 'number', step: '1' });
     const toInput = createElement('input', 'fe-batch-price-number', { type: 'number', step: '1' });
-    [[STRINGS.from, fromInput], [STRINGS.to, toInput]].forEach(([text, input]) => {
+    [[labels.from, fromInput], [labels.to, toInput]].forEach(([text, input]) => {
       const label = createElement('label');
-      label.append(createElement('span', '', { textContent: text + suffix }), input);
+      label.append(createElement('span', '', { textContent: text }), input);
       numbers.append(label);
     });
     const dualRange = createElement('div', 'fe-batch-dual-range');
     const selection = createElement('div', 'fe-batch-range-selection');
     const fromSlider = createElement('input', 'fe-batch-range-min', { type: 'range' });
     const toSlider = createElement('input', 'fe-batch-range-max', { type: 'range' });
-    fromSlider.setAttribute('aria-label', isPrice ? STRINGS.minPrice : STRINGS.minValue);
-    toSlider.setAttribute('aria-label', isPrice ? STRINGS.maxPrice : STRINGS.maxValue);
+    fromSlider.setAttribute('aria-label', labels.min);
+    toSlider.setAttribute('aria-label', labels.max);
     dualRange.append(createElement('div', 'fe-batch-range-track'), selection, fromSlider, toSlider);
     editor.append(numbers, dualRange);
 

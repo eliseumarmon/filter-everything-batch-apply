@@ -1,0 +1,52 @@
+# Spanish (Spain) translation for Filter Everything Batch Apply.
+# Copyright (C) 2026 Eliseu Martínez
+# This file is distributed under the GPL-2.0-or-later.
+# Keep fe-batch-apply-es_ES.l10n.php in sync with this file.
+msgid ""
+msgstr ""
+"Project-Id-Version: Filter Everything Batch Apply 0.2.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-22 00:00+0000\n"
+"PO-Revision-Date: 2026-10-22 00:00+0000\n"
+"Last-Translator: Eliseu Martínez\n"
+"Language-Team: Spanish (Spain)\n"
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Domain: fe-batch-apply\n"
+
+#: filter-everything-batch-apply.php
+msgid "Apply filters"
+msgstr "Aplicar filtros"
+
+#: filter-everything-batch-apply.php
+msgid "Reset"
+msgstr "Restablecer"
+
+#. translators: Lower bound label of a range editor. Prices append the currency symbol, e.g. "From (€)".
+#: filter-everything-batch-apply.php
+msgid "From"
+msgstr "Desde"
+
+#. translators: Upper bound label of a range editor. Prices append the currency symbol, e.g. "To (€)".
+#: filter-everything-batch-apply.php
+msgid "To"
+msgstr "Hasta"
+
+#: filter-everything-batch-apply.php
+msgid "Minimum price"
+msgstr "Precio mínimo"
+
+#: filter-everything-batch-apply.php
+msgid "Maximum price"
+msgstr "Precio máximo"
+
+#: filter-everything-batch-apply.php
+msgid "Minimum"
+msgstr "Mínimo"
+
+#: filter-everything-batch-apply.php
+msgid "Maximum"
+msgstr "Máximo"

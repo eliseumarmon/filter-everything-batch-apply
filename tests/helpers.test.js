@@ -201,3 +201,16 @@ test('buildResetUrl removes managed params and pagination only', () => {
   assert.equal(actual, `${BASE}?orderby=price`);
   assert.equal(helpers.buildResetUrl(BASE, ['filtro_color']), BASE);
 });
+
+test('rangeLabels appends the currency symbol to price labels only', () => {
+  const strings = { from: 'Desde', to: 'Hasta', minPrice: 'Precio mínimo', maxPrice: 'Precio máximo', minValue: 'Mínimo', maxValue: 'Máximo' };
+  assert.deepEqual(helpers.rangeLabels(strings, '€', true), {
+    from: 'Desde (€)', to: 'Hasta (€)', min: 'Precio mínimo', max: 'Precio máximo',
+  });
+  assert.deepEqual(helpers.rangeLabels(strings, '€', false), {
+    from: 'Desde', to: 'Hasta', min: 'Mínimo', max: 'Máximo',
+  });
+  assert.deepEqual(helpers.rangeLabels(strings, '', true), {
+    from: 'Desde', to: 'Hasta', min: 'Precio mínimo', max: 'Precio máximo',
+  });
+});

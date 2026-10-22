@@ -19,6 +19,10 @@ if (!defined('ABSPATH')) {
 
 define('FE_BATCH_APPLY_VERSION', '0.2.0');
 
+add_action('init', function () {
+    load_plugin_textdomain('fe-batch-apply', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
+
 /**
  * Map one Filter Everything field to the addon's field config.
  * Returns null for views the addon leaves to Filter Everything (radio,
@@ -132,6 +136,26 @@ function fe_batch_reset_presentation_enabled() {
 }
 
 /**
+ * Translatable UI strings passed to the script.
+ *
+ * @return array
+ */
+function fe_batch_get_strings() {
+    return array(
+        'apply' => __('Apply filters', 'fe-batch-apply'),
+        'reset' => __('Reset', 'fe-batch-apply'),
+        /* translators: Lower bound label of a range editor. Prices append the currency symbol, e.g. "From (€)". */
+        'from' => __('From', 'fe-batch-apply'),
+        /* translators: Upper bound label of a range editor. Prices append the currency symbol, e.g. "To (€)". */
+        'to' => __('To', 'fe-batch-apply'),
+        'minPrice' => __('Minimum price', 'fe-batch-apply'),
+        'maxPrice' => __('Maximum price', 'fe-batch-apply'),
+        'minValue' => __('Minimum', 'fe-batch-apply'),
+        'maxValue' => __('Maximum', 'fe-batch-apply'),
+    );
+}
+
+/**
  * Run before Filter Everything's JavaScript restores the visitor's old
  * folding/more-less preferences. Only presentation cookies are cleared.
  * This does not touch the actual filter query or WooCommerce session.
@@ -160,6 +184,11 @@ add_action('wp_enqueue_scripts', function () {
         'separator' => defined('FLRT_QUERY_TERMS_SEPARATOR') ? (string) FLRT_QUERY_TERMS_SEPARATOR : ';',
         'fields' => $fields,
         'resetPresentation' => fe_batch_reset_presentation_enabled(),
+        'strings' => fe_batch_get_strings(),
+        // WooCommerce returns an HTML entity (e.g. &euro;); the script uses textContent.
+        'currencySymbol' => function_exists('get_woocommerce_currency_symbol')
+            ? html_entity_decode((string) get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8')
+            : '',
     );
     wp_add_inline_script(
         'fe-batch-apply',
