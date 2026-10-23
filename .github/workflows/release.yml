@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check the tag matches the plugin version
         run: |
@@ -29,14 +29,14 @@ jobs:
       - name: Build the plugin ZIP
         run: git archive --format=zip --prefix=filter-everything-batch-apply/ -o filter-everything-batch-apply.zip HEAD
 
-      - name: Extract release notes from the README changelog
+      - name: Extract release notes from CHANGELOG.md
         run: |
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '
-            /^##/ { if (found) exit }
-            $0 ~ "^### " v "( |$)" { found = 1; next }
+            /^## / { if (found) exit }
+            $0 ~ "^## " v "( |$)" { found = 1; next }
             found { print }
-          ' README.md > release-notes.md
+          ' CHANGELOG.md > release-notes.md
           if grep -q '[^[:space:]]' release-notes.md; then
             echo "NOTES_ARGS=--notes-file release-notes.md" >> "$GITHUB_ENV"
           else
