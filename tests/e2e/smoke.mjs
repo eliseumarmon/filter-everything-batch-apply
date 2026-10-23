@@ -11,7 +11,7 @@
  * Environment:
  *   BASE_URL        Site root (default http://localhost:8080).
  *   ARCHIVE_PATH    Page that renders a filter widget (default /shop/).
- *   NO_WIDGET_PATH  Page without a widget (default /?s=camiseta&post_type=product).
+ *   NO_WIDGET_PATH  Page without a widget (default /?s=test&post_type=product).
  *   CHROME_PATH     Chrome/Edge executable; otherwise common paths are tried.
  *   CDP_URL         Attach to a browser already started with
  *                   --remote-debugging-port (e.g. http://127.0.0.1:9222)
@@ -33,7 +33,7 @@ import { join } from 'node:path';
 
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const ARCHIVE_PATH = process.env.ARCHIVE_PATH || '/shop/';
-const NO_WIDGET_PATH = process.env.NO_WIDGET_PATH || '/?s=camiseta&post_type=product';
+const NO_WIDGET_PATH = process.env.NO_WIDGET_PATH || '/?s=test&post_type=product';
 const TIMEOUT_MS = 30000;
 const VIEWPORT = { width: 1440, height: 900 };
 const PAGINATION_PARAMS = ['paged', 'product-page'];

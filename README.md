@@ -106,7 +106,7 @@ BASE_URL=https://shop.test ARCHIVE_PATH=/product-category/shirts/ node tests/e2e
 |---|---|---|
 | `BASE_URL` | `http://localhost:8080` | Site root |
 | `ARCHIVE_PATH` | `/shop/` | Page with a filter widget that has at least two checkbox or label fields |
-| `NO_WIDGET_PATH` | `/?s=camiseta&post_type=product` | Page without a filter widget |
+| `NO_WIDGET_PATH` | `/?s=test&post_type=product` | Page without a filter widget |
 | `CHROME_PATH` | Common Chrome/Edge paths | Browser executable |
 | `CDP_URL` | unset | Attach to a browser started with `--remote-debugging-port` (skips the second, cache-less browser) |
 
@@ -150,7 +150,3 @@ The [release workflow](.github/workflows/release.yml) checks that the tag matche
 ### 0.1.x
 
 Built for a single shop: local checkbox selection with one Apply navigation, a local price editor, Reset, hidden native buttons and a sticky action panel.
-
-## License
-
-GPL-2.0-or-later.
