@@ -42,10 +42,15 @@ function fe_batch_update_repo() {
  * Turn a GitHub "latest release" API response into update data.
  * Returns null when the release has no usable version or package asset.
  *
- * @param mixed $release Decoded JSON of the release.
+ * The package must be a release download of the update repository, so a
+ * tampered API response cannot point sites at another host.
+ *
+ * @param mixed       $release Decoded JSON of the release.
+ * @param string|null $repo    owner/repo the package must come from; defaults to the update repository.
  * @return array|null { version, url, package }
  */
-function fe_batch_parse_release($release) {
+function fe_batch_parse_release($release, $repo = null) {
+    $download_prefix = 'https://github.com/' . ($repo === null ? fe_batch_update_repo() : $repo) . '/releases/download/';
     if (!is_array($release) || empty($release['tag_name']) || !is_string($release['tag_name'])) {
         return null;
     }
@@ -62,7 +67,7 @@ function fe_batch_parse_release($release) {
             isset($asset['name'], $asset['browser_download_url']) &&
             $asset['name'] === FE_BATCH_APPLY_UPDATE_ASSET &&
             is_string($asset['browser_download_url']) &&
-            strpos($asset['browser_download_url'], 'https://') === 0
+            strpos($asset['browser_download_url'], $download_prefix) === 0
         ) {
             $package = $asset['browser_download_url'];
             break;
@@ -146,8 +151,38 @@ function fe_batch_filter_update($update, $plugin_data, $plugin_file) {
         'version' => $release['version'],
         'url' => $release['url'],
         'package' => $release['package'],
-        'requires_php' => '7.4',
+        'requires_php' => !empty($plugin_data['RequiresPHP']) ? $plugin_data['RequiresPHP'] : '7.4',
     );
 }
 
 add_filter('update_plugins_github.com', 'fe_batch_filter_update', 10, 3);
+
+/**
+ * The release ZIP always unpacks into "filter-everything-batch-apply/". When
+ * the add-on is installed under another folder name (for example a GitHub
+ * "Download ZIP" folder ending in "-main"), rename the unpacked folder to the
+ * installed one so the update replaces it instead of deactivating the add-on.
+ *
+ * @param string      $source        Path of the unpacked package folder.
+ * @param string      $remote_source Path of the folder the package was unpacked into.
+ * @param WP_Upgrader $upgrader      Upgrader instance.
+ * @param array       $hook_extra    Extra arguments; "plugin" holds the basename being updated.
+ * @return string|WP_Error
+ */
+function fe_batch_keep_plugin_folder($source, $remote_source, $upgrader, $hook_extra = array()) {
+    global $wp_filesystem;
+
+    $basename = plugin_basename(FE_BATCH_APPLY_FILE);
+    if (!is_array($hook_extra) || !isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $basename) {
+        return $source;
+    }
+
+    $wanted = trailingslashit($remote_source) . dirname($basename);
+    if (untrailingslashit($source) === $wanted || !$wp_filesystem) {
+        return $source;
+    }
+
+    return $wp_filesystem->move(untrailingslashit($source), $wanted, true) ? trailingslashit($wanted) : $source;
+}
+
+add_filter('upgrader_source_selection', 'fe_batch_keep_plugin_folder', 10, 4);
