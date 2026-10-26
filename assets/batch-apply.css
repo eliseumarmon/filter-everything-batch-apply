@@ -1,5 +1,29 @@
 /* Only enqueued where Filter Everything renders supported fields. Scoped to addon widgets. */
-.fe-batch-ready { --fe-batch-ink: #30343a; --fe-batch-border: #d7dade; }
+
+/* Customization: set any public --fe-batch-* property on :root, body or
+   .fe-batch-ready (see README, Styling). Each one is read once into a
+   private --_fe-batch-* property whose fallback is the default look, so the
+   rules below never need a value of their own. */
+.fe-batch-ready {
+  --_fe-batch-ink: var(--fe-batch-ink, #30343a);
+  --_fe-batch-surface: var(--fe-batch-surface, #fff);
+  --_fe-batch-border: var(--fe-batch-border, #d7dade);
+  --_fe-batch-radius: var(--fe-batch-radius, 4px);
+  --_fe-batch-track: var(--fe-batch-track, #d9dcdf);
+  --_fe-batch-range: var(--fe-batch-range, var(--_fe-batch-ink));
+  --_fe-batch-panel-bg: var(--fe-batch-panel-bg, var(--_fe-batch-surface));
+  --_fe-batch-panel-border: var(--fe-batch-panel-border, #e7e7e7);
+  --_fe-batch-panel-radius: var(--fe-batch-panel-radius, 6px);
+  --_fe-batch-button-radius: var(--fe-batch-button-radius, 5px);
+  --_fe-batch-apply-bg: var(--fe-batch-apply-bg, var(--_fe-batch-ink));
+  --_fe-batch-apply-text: var(--fe-batch-apply-text, #fff);
+  --_fe-batch-apply-hover-bg: var(--fe-batch-apply-hover-bg, #171a1e);
+  --_fe-batch-reset-bg: var(--fe-batch-reset-bg, var(--_fe-batch-surface));
+  --_fe-batch-reset-text: var(--fe-batch-reset-text, var(--_fe-batch-ink));
+  --_fe-batch-reset-border: var(--fe-batch-reset-border, #bfc3c8);
+  --_fe-batch-reset-hover-bg: var(--fe-batch-reset-hover-bg, #f4f4f4);
+  --_fe-batch-focus: var(--fe-batch-focus, var(--_fe-batch-ink));
+}
 .fe-batch-ready .fe-batch-native-action,
 .fe-batch-ready .wpc-filters-submit-button,
 .fe-batch-ready .wpc-filters-reset-button,
@@ -12,19 +36,19 @@
 .fe-batch-ready .fe-batch-price-editor * { box-sizing: border-box; }
 .fe-batch-ready .fe-batch-price-editor { width: 100%; max-width: 100%; margin: 10px 0 22px; padding: 0 2px; }
 .fe-batch-ready .fe-batch-price-numbers { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; width: 100%; }
-.fe-batch-ready .fe-batch-price-numbers label { display: block; min-width: 0; width: 100%; margin: 0; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--fe-batch-ink); }
+.fe-batch-ready .fe-batch-price-numbers label { display: block; min-width: 0; width: 100%; margin: 0; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--_fe-batch-ink); }
 .fe-batch-ready .fe-batch-price-numbers label span { display: block; margin-bottom: 5px; white-space: nowrap; }
-.fe-batch-ready input.fe-batch-price-number { display: block; width: 100% !important; max-width: 100% !important; min-width: 0; height: 38px; padding: 7px 9px !important; margin: 0 !important; border: 1px solid var(--fe-batch-border) !important; border-radius: 4px; background: white; color: var(--fe-batch-ink); font: inherit; text-align: left; }
+.fe-batch-ready input.fe-batch-price-number { display: block; width: 100% !important; max-width: 100% !important; min-width: 0; height: 38px; padding: 7px 9px !important; margin: 0 !important; border: 1px solid var(--_fe-batch-border) !important; border-radius: var(--_fe-batch-radius); background: var(--_fe-batch-surface); color: var(--_fe-batch-ink); font: inherit; text-align: left; }
 .fe-batch-ready .fe-batch-dual-range { position: relative; height: 40px; margin: 18px 8px 0; }
 .fe-batch-ready .fe-batch-range-track,
-.fe-batch-ready .fe-batch-range-selection { height: 4px; border-radius: 4px; position: absolute; top: 18px; left: 0; }
-.fe-batch-ready .fe-batch-range-track { right: 0; background: #d9dcdf; }
-.fe-batch-ready .fe-batch-range-selection { background: var(--fe-batch-ink); }
+.fe-batch-ready .fe-batch-range-selection { height: 4px; border-radius: var(--_fe-batch-radius); position: absolute; top: 18px; left: 0; }
+.fe-batch-ready .fe-batch-range-track { right: 0; background: var(--_fe-batch-track); }
+.fe-batch-ready .fe-batch-range-selection { background: var(--_fe-batch-range); }
 .fe-batch-ready .fe-batch-dual-range input[type="range"] { position: absolute; top: 10px; left: 0; width: 100%; height: 20px; padding: 0 !important; margin: 0 !important; background: transparent; border: 0; appearance: none; -webkit-appearance: none; pointer-events: none; }
 .fe-batch-ready .fe-batch-dual-range .fe-batch-range-min { z-index: 2; }
 .fe-batch-ready .fe-batch-dual-range .fe-batch-range-max { z-index: 3; }
-.fe-batch-ready .fe-batch-dual-range input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; background: white; border: 2px solid var(--fe-batch-ink); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
-.fe-batch-ready .fe-batch-dual-range input[type="range"]::-moz-range-thumb { background: white; border: 2px solid var(--fe-batch-ink); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; background: var(--_fe-batch-surface); border: 2px solid var(--_fe-batch-range); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]::-moz-range-thumb { background: var(--_fe-batch-surface); border: 2px solid var(--_fe-batch-range); border-radius: 100%; height: 17px; width: 17px; cursor: grab; pointer-events: auto; }
 .fe-batch-ready .fe-batch-dual-range input[type="range"]::-moz-range-track { background: transparent; border: 0; }
 /* Keep the action card inset from the off-canvas sides and bottom, avoiding
    clipping caused by BeTheme scroll containers and sticky positioning. */
@@ -40,35 +64,35 @@
   min-width: 0;
   margin: 16px 12px 16px;
   padding: 12px 10px;
-  background: #fff;
-  border: 1px solid #e7e7e7;
-  border-radius: 6px;
+  background: var(--_fe-batch-panel-bg);
+  border: 1px solid var(--_fe-batch-panel-border);
+  border-radius: var(--_fe-batch-panel-radius);
   overflow: visible;
 }
 .fe-batch-ready .fe-batch-controls > button { min-width: 0; max-width: 100%; }
 
-.fe-batch-ready .fe-batch-controls button { box-sizing: border-box; display: block; width: 100%; padding: 12px 14px; margin: 0; font: inherit; font-weight: 600; line-height: 1.4; border-radius: 5px; cursor: pointer; }
-.fe-batch-ready .fe-batch-apply { color: #fff !important; background: var(--fe-batch-ink) !important; border: 1px solid var(--fe-batch-ink) !important; }
-.fe-batch-ready .fe-batch-apply:hover { background: #171a1e !important; }
-.fe-batch-ready .fe-batch-reset { color: var(--fe-batch-ink) !important; background: #fff !important; border: 1px solid #bfc3c8 !important; }
-.fe-batch-ready .fe-batch-reset:hover { background: #f4f4f4 !important; }
+.fe-batch-ready .fe-batch-controls button { box-sizing: border-box; display: block; width: 100%; padding: 12px 14px; margin: 0; font: inherit; font-weight: 600; line-height: 1.4; border-radius: var(--_fe-batch-button-radius); cursor: pointer; }
+.fe-batch-ready .fe-batch-apply { color: var(--_fe-batch-apply-text) !important; background: var(--_fe-batch-apply-bg) !important; border: 1px solid var(--_fe-batch-apply-bg) !important; }
+.fe-batch-ready .fe-batch-apply:hover { background: var(--_fe-batch-apply-hover-bg) !important; }
+.fe-batch-ready .fe-batch-reset { color: var(--_fe-batch-reset-text) !important; background: var(--_fe-batch-reset-bg) !important; border: 1px solid var(--_fe-batch-reset-border) !important; }
+.fe-batch-ready .fe-batch-reset:hover { background: var(--_fe-batch-reset-hover-bg) !important; }
 /* Pending navigation: both buttons are disabled until the page changes. */
 .fe-batch-ready .fe-batch-controls button:disabled { cursor: progress; opacity: .7; }
-.fe-batch-ready input[type="checkbox"] { accent-color: var(--fe-batch-ink); }
-/* Keyboard focus: one clear ring in the ink color, offset from the control
-   so it reads on the light grey panel. Pointer focus shows no ring. */
+.fe-batch-ready input[type="checkbox"] { accent-color: var(--_fe-batch-ink); }
+/* Keyboard focus: one clear ring, offset from the control so it reads on
+   the light grey panel. Pointer focus shows no ring. */
 .fe-batch-ready li.wpc-checkbox-item input[type="checkbox"]:focus-visible,
 .fe-batch-ready input.fe-batch-price-number:focus-visible,
 .fe-batch-ready .fe-batch-controls button:focus-visible,
 .fe-batch-ready .wpc-filter-title button:focus-visible,
-.fe-batch-ready a.wpc-toggle-a:focus-visible { outline: 2px solid var(--fe-batch-ink) !important; outline-offset: 2px !important; }
+.fe-batch-ready a.wpc-toggle-a:focus-visible { outline: 2px solid var(--_fe-batch-focus) !important; outline-offset: 2px !important; }
 /* The Labels view hides its checkbox: ring the visible label instead. */
-.fe-batch-ready li.wpc-label-item:has(input[type="checkbox"]:focus-visible) label { outline: 2px solid var(--fe-batch-ink) !important; outline-offset: 2px !important; }
+.fe-batch-ready li.wpc-label-item:has(input[type="checkbox"]:focus-visible) label { outline: 2px solid var(--_fe-batch-focus) !important; outline-offset: 2px !important; }
 /* Range inputs span the whole track: ring only the focused handle. */
 .fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible { outline: none !important; }
-.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fe-batch-ink); }
-.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fe-batch-ink); }
-.fe-batch-ready li.wpc-term-item a { color: var(--fe-batch-ink) !important; }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--_fe-batch-surface), 0 0 0 4px var(--_fe-batch-focus); }
+.fe-batch-ready .fe-batch-dual-range input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--_fe-batch-surface), 0 0 0 4px var(--_fe-batch-focus); }
+.fe-batch-ready li.wpc-term-item a { color: var(--_fe-batch-ink) !important; }
 
 /* Applied terms are already shown in the catalog's active-filter chips.
    Do not repeat them in the filter heading (e.g. "— Amarillo", "— Deportes"). */

@@ -2,6 +2,10 @@
 
 Notable changes per release. Each `## X.Y.Z` section becomes the notes of the matching GitHub release.
 
+## Unreleased
+
+- Styling through documented CSS custom properties (`--fe-batch-*`): colors and radii can be changed from Additional CSS; with no overrides the look is unchanged. See [Styling](https://github.com/eliseumarmon/filter-everything-batch-apply#readme-styling).
+
 ## 0.2.0 - 2026-10-23
 
 - **Zero configuration:** fields, URL parameters and separator come from Filter Everything for each page and filter set; a DOM fallback covers pages without configuration.

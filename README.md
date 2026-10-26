@@ -70,6 +70,41 @@ One tab stop per term, Space/Enter toggle without scrolling, visible focus rings
 add_filter('fe_batch_apply_reset_presentation', '__return_false');
 ```
 
+## Styling
+
+Every color and radius is a CSS custom property. Set the ones you want on `:root` (or `body`, or `.fe-batch-ready`) from *Appearance > Customize > Additional CSS* or your theme's stylesheet; anything you leave out keeps the default look.
+
+```css
+:root {
+  --fe-batch-ink: #0b5394;            /* text, checkboxes, slider, Apply */
+  --fe-batch-apply-hover-bg: #073763;
+  --fe-batch-button-radius: 999px;
+}
+```
+
+| Property | Default | Used for |
+|---|---|---|
+| `--fe-batch-ink` | `#30343a` | Main color: labels, term links, checkboxes; default for the range, Apply background, Reset text and focus ring |
+| `--fe-batch-surface` | `#fff` | Inputs, slider handles; default for the panel and Reset background |
+| `--fe-batch-border` | `#d7dade` | Price input borders |
+| `--fe-batch-radius` | `4px` | Price inputs and range track |
+| `--fe-batch-track` | `#d9dcdf` | Range track |
+| `--fe-batch-range` | `--fe-batch-ink` | Selected range and handle borders |
+| `--fe-batch-panel-bg` | `--fe-batch-surface` | Apply/Reset panel background |
+| `--fe-batch-panel-border` | `#e7e7e7` | Apply/Reset panel border |
+| `--fe-batch-panel-radius` | `6px` | Apply/Reset panel corners |
+| `--fe-batch-button-radius` | `5px` | Apply and Reset corners |
+| `--fe-batch-apply-bg` | `--fe-batch-ink` | Apply background and border |
+| `--fe-batch-apply-text` | `#fff` | Apply text |
+| `--fe-batch-apply-hover-bg` | `#171a1e` | Apply background on hover |
+| `--fe-batch-reset-bg` | `--fe-batch-surface` | Reset background |
+| `--fe-batch-reset-text` | `--fe-batch-ink` | Reset text |
+| `--fe-batch-reset-border` | `#bfc3c8` | Reset border |
+| `--fe-batch-reset-hover-bg` | `#f4f4f4` | Reset background on hover |
+| `--fe-batch-focus` | `--fe-batch-ink` | Keyboard focus ring |
+
+Keep enough contrast between `--fe-batch-apply-text` and `--fe-batch-apply-bg`, and make the focus ring visible on the panel background.
+
 ## Translations
 
 Text domain `fe-batch-apply`; source strings in English. Spanish (`es_ES`) ships in `languages/` (`.po` and WordPress 6.5+ `.l10n.php`); start new languages from `fe-batch-apply.pot`. The currency symbol comes from WooCommerce.
