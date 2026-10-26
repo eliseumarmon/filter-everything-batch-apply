@@ -5,6 +5,7 @@ Notable changes per release. Each `## X.Y.Z` section becomes the notes of the ma
 ## Unreleased
 
 - Styling through documented CSS custom properties (`--fe-batch-*`): colors and radii can be changed from Additional CSS; with no overrides the look is unchanged. See [Styling](https://github.com/eliseumarmon/filter-everything-batch-apply/blob/main/README.md#styling).
+- Apply and Reset hover colors follow their base colors (`color-mix()`), so changing `--fe-batch-ink` or the button colors also updates the hover state.
 
 ## 0.2.0 - 2026-10-23
 

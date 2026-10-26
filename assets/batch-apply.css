@@ -17,12 +17,20 @@
   --_fe-batch-button-radius: var(--fe-batch-button-radius, 5px);
   --_fe-batch-apply-bg: var(--fe-batch-apply-bg, var(--_fe-batch-ink));
   --_fe-batch-apply-text: var(--fe-batch-apply-text, #fff);
-  --_fe-batch-apply-hover-bg: var(--fe-batch-apply-hover-bg, #171a1e);
+  --_fe-batch-apply-hover-bg: var(--fe-batch-apply-hover-bg, color-mix(in srgb, var(--_fe-batch-apply-bg) 50%, #000));
   --_fe-batch-reset-bg: var(--fe-batch-reset-bg, var(--_fe-batch-surface));
   --_fe-batch-reset-text: var(--fe-batch-reset-text, var(--_fe-batch-ink));
   --_fe-batch-reset-border: var(--fe-batch-reset-border, #bfc3c8);
-  --_fe-batch-reset-hover-bg: var(--fe-batch-reset-hover-bg, #f4f4f4);
+  --_fe-batch-reset-hover-bg: var(--fe-batch-reset-hover-bg, color-mix(in srgb, var(--_fe-batch-reset-bg) 95%, var(--_fe-batch-ink)));
   --_fe-batch-focus: var(--fe-batch-focus, var(--_fe-batch-ink));
+}
+/* Hover colors follow their base color; without color-mix() support they
+   fall back to the fixed shades of the default look. */
+@supports not (color: color-mix(in srgb, #000 50%, #fff)) {
+  .fe-batch-ready {
+    --_fe-batch-apply-hover-bg: var(--fe-batch-apply-hover-bg, #171a1e);
+    --_fe-batch-reset-hover-bg: var(--fe-batch-reset-hover-bg, #f4f4f4);
+  }
 }
 .fe-batch-ready .fe-batch-native-action,
 .fe-batch-ready .wpc-filters-submit-button,

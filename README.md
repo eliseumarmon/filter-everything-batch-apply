@@ -76,8 +76,7 @@ Every color and radius is a CSS custom property. Set the ones you want on `:root
 
 ```css
 :root {
-  --fe-batch-ink: #0b5394;            /* text, checkboxes, slider, Apply */
-  --fe-batch-apply-hover-bg: #073763;
+  --fe-batch-ink: #0b5394;            /* text, checkboxes, slider, Apply (hover follows) */
   --fe-batch-button-radius: 999px;
 }
 ```
@@ -96,14 +95,14 @@ Every color and radius is a CSS custom property. Set the ones you want on `:root
 | `--fe-batch-button-radius` | `5px` | Apply and Reset corners |
 | `--fe-batch-apply-bg` | `--fe-batch-ink` | Apply background and border |
 | `--fe-batch-apply-text` | `#fff` | Apply text |
-| `--fe-batch-apply-hover-bg` | `#171a1e` | Apply background on hover |
+| `--fe-batch-apply-hover-bg` | `--fe-batch-apply-bg` mixed 50% with black | Apply background on hover |
 | `--fe-batch-reset-bg` | `--fe-batch-surface` | Reset background |
 | `--fe-batch-reset-text` | `--fe-batch-ink` | Reset text |
 | `--fe-batch-reset-border` | `#bfc3c8` | Reset border |
-| `--fe-batch-reset-hover-bg` | `#f4f4f4` | Reset background on hover |
+| `--fe-batch-reset-hover-bg` | `--fe-batch-reset-bg` mixed 5% with `--fe-batch-ink` | Reset background on hover |
 | `--fe-batch-focus` | `--fe-batch-ink` | Keyboard focus ring |
 
-Keep enough contrast between `--fe-batch-apply-text` and `--fe-batch-apply-bg`, and make the focus ring visible on the panel background.
+Hover colors are derived with `color-mix()`; browsers without it use the fixed default shades (`#171a1e`, `#f4f4f4`) unless you set the hover properties. Keep enough contrast between `--fe-batch-apply-text` and `--fe-batch-apply-bg`, and make the focus ring visible on the panel background.
 
 ## Translations
 
