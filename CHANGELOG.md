@@ -4,7 +4,7 @@ Notable changes per release. Each `## X.Y.Z` section becomes the notes of the ma
 
 ## Unreleased
 
-- Styling through documented CSS custom properties (`--fe-batch-*`): colors and radii can be changed from Additional CSS; with no overrides the look is unchanged. See [Styling](https://github.com/eliseumarmon/filter-everything-batch-apply#readme-styling).
+- Styling through documented CSS custom properties (`--fe-batch-*`): colors and radii can be changed from Additional CSS; with no overrides the look is unchanged. See [Styling](https://github.com/eliseumarmon/filter-everything-batch-apply/blob/main/README.md#styling).
 
 ## 0.2.0 - 2026-10-23
 
@@ -14,10 +14,10 @@ Notable changes per release. Each `## X.Y.Z` section becomes the notes of the ma
 - Translatable strings, Spanish translation, WooCommerce currency symbol.
 - Busy Apply/Reset that cannot be double-submitted; untouched full ranges add no parameters.
 - Back/Forward show the state of the page you return to, with or without the back/forward cache.
-- Keyboard and focus improvements (see [Accessibility](https://github.com/eliseumarmon/filter-everything-batch-apply#readme-accessibility)).
+- Keyboard and focus improvements (see [Accessibility](https://github.com/eliseumarmon/filter-everything-batch-apply/blob/main/README.md#accessibility)).
 - Robust re-initialization when the widget is replaced, and no work on pages without a widget.
 - `fe_batch_apply_fields` and `fe_batch_apply_reset_presentation` filters; requires WordPress 6.5 and declares the Filter Everything dependency.
-- Automatic updates from GitHub releases (see [Updates](https://github.com/eliseumarmon/filter-everything-batch-apply#readme-updates)), published by a tag-triggered release workflow.
+- Automatic updates from GitHub releases (see [Updates](https://github.com/eliseumarmon/filter-everything-batch-apply/blob/main/README.md#updates)), published by a tag-triggered release workflow.
 
 ## 0.1.x
 
